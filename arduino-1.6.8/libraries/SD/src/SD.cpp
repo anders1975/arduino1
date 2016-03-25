@@ -347,6 +347,10 @@ boolean SDClass::begin(uint8_t csPin) {
          root.openRoot(volume);
 }
 
+void SDClass::end()
+{
+  root.close();
+}
 
 
 // this little helper is used to traverse paths

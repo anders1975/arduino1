@@ -87,6 +87,201 @@ String dryingMode = "Started";
 int dryingModeHeatingTemperature = 28;
 int dryingModeCoolingTemperature = 27;
 
+void readAllSensorsTrigger()
+{
+  Serial.print(__FUNCTION__);
+  Serial.println(now());
+  bool heatingStarted = false;
+  bool coolingStarted = false;
+  int humidityAbsolute = 0;
+  for(int count = 0 ; count < MAX_SENSOR ; ++count)
+  {
+    // Move to previous
+    sensorList[count].previousMeasure.sampleTime=sensorList[count].latestMeasure.sampleTime;
+    sensorList[count].previousMeasure.humidity=sensorList[count].latestMeasure.humidity;
+    sensorList[count].previousMeasure.temperature=sensorList[count].latestMeasure.temperature;
+    // Read current
+    sensorList[count].latestMeasure.sampleTime = now();
+    int returnCode = dht_sensor.read21(sensorList[count].digitalPin);
+    sensorList[count].sampleReturnCode = returnCode;
+    switch (returnCode)
+    {
+    case DHTLIB_OK:
+      humidityAbsolute = humidityRelativeToAbsolute(dht_sensor.temperature, dht_sensor.humidity);
+      sensorList[count].latestMeasure.temperature = dht_sensor.temperature + (int)(sensorList[count].temperatureCalibration*10);
+      sensorList[count].latestMeasure.humidity = humidityAbsolute+ (unsigned int)(sensorList[count].humidityCalibration*10);
+      ++sensorList[count].numberOfWrites;
+      if (sensorList[count].numberOfWrites >= 1000)
+      {
+        sensorList[count].numberOfWrites = 0;
+      }
+      if (0 == sensorList[count].firstSampleTime)
+      {
+        sensorList[count].firstSampleTime = now();
+      }
+      if (sensorList[count].isInflowSensor)
+      {
+        Serial.print("InflowSensor");
+        Serial.print(" ");
+        Serial.print(count);
+        Serial.print(" ");
+        Serial.println(dryingMode);
+        if ( dryingMode != "Heating" && sensorList[count].latestMeasure.temperature >= dryingModeHeatingTemperature*10)  
+        {
+          dryingMode = "Heating";
+          heatingStarted = true;
+          Serial.println("Heating");
+        }
+        if ( dryingMode == "Heating" && sensorList[count].latestMeasure.temperature <= dryingModeCoolingTemperature*10)  
+        {
+          dryingMode = "Cooling";
+          coolingStarted = true;
+          Serial.println("Cooling");
+        }
+      }
+    break;
+    default:
+      Serial.print("Sensor error: ,\t");
+      Serial.print(returnCode);
+      Serial.print(" "); 
+      Serial.println(count);
+      break;
+    }
+  }
+  if (heatingStarted)
+  {
+    for(int count = 0 ; count < MAX_SENSOR ; ++count)
+    {
+      sensorList[count].heatingStartedMeasure = sensorList[count].latestMeasure;
+    }
+  }
+  if (coolingStarted)
+  {
+    for(int count = 0 ; count < MAX_SENSOR ; ++count)
+    {
+      sensorList[count].coolingStartedMeasure = sensorList[count].latestMeasure;
+    }
+  }
+}
+
+String twoDigits(int number)
+{
+  String digits;
+  if (number < 10)
+  {
+    digits = "0";
+  }
+  digits += number;
+  return digits;
+}
+
+String yearMonthDayToString(time_t time)
+{
+  String yearMonthDay = "";
+  yearMonthDay += year(time)-2000;
+  yearMonthDay += twoDigits(month(time));
+  yearMonthDay += twoDigits(day(time));
+  return yearMonthDay;
+}
+
+String hourMinuteSecondToString(time_t time)
+{
+  String stringHourMinuteSecond = "";
+  stringHourMinuteSecond += twoDigits(hour(time));
+  stringHourMinuteSecond += twoDigits(minute(time));
+  stringHourMinuteSecond += twoDigits(second(time));
+  return stringHourMinuteSecond;
+}
+
+void SDSetup()
+{
+  const int chipSelect = 10;
+  Serial.println(__FUNCTION__);
+  Serial.print("Initializing SD card...");
+  // make sure that the default chip select pin is set to
+  // output, even if you don't use it:
+  pinMode(53, OUTPUT);
+
+  // see if the card is present and can be initialized:
+  if (!SD.begin(chipSelect))
+  {
+    Serial.println("Card failed, or not present");
+    // don't do anything more:
+    return;
+  }
+  Serial.println("Card initialized.");
+}
+
+void SDLogWrite(String dataString)
+{
+  SDSetup();
+  String fileName = yearMonthDayToString(now()) + ".txt";
+  Serial.println(fileName);
+  // Open the file. note that only one file can be open at a time,
+  // so you have to close this one before opening another.
+  File dataFile = SD.open(fileName.c_str(), FILE_WRITE);
+  // If the file is available, write to it:
+  if (dataFile)
+  {
+    dataFile.println(dataString);
+    dataFile.close();
+    // print to the serial port too:
+    Serial.println(dataString);
+  }  
+  // If the file isn't open, pop up an error:
+  else
+  {
+    Serial.println("Error opening " + fileName);
+  } 
+  SD.end();
+}
+
+void logAllSensors()
+{
+  Serial.println(__FUNCTION__);
+  String logEntry = "";
+  if (logMarker == true)
+  {
+    logEntry += "MARK";
+    logMarker = false;
+  }
+  else
+  {
+    logEntry += dryingMode;
+  }
+  logEntry += ";";
+
+  for(int count = 0 ; count < MAX_SENSOR ; ++count)
+  {
+    logEntry += sensorList[count].description;
+    logEntry += ";";
+    logEntry += sensorList[count].sampleReturnCode;
+    logEntry += ";";
+    logEntry += sensorList[count].latestMeasure.sampleTime;
+    logEntry += ";";
+    logEntry += yearMonthDayToString(sensorList[count].latestMeasure.sampleTime);
+    logEntry += "-";
+    logEntry += hourMinuteSecondToString(sensorList[count].latestMeasure.sampleTime);
+    logEntry += ";";
+    logEntry += sensorList[count].latestMeasure.humidity;
+    logEntry += ";";
+    logEntry += sensorList[count].latestMeasure.temperature;
+    logEntry += ";";
+  }
+  Serial.println(logEntry);
+  SDLogWrite(logEntry);
+}
+
+void hourTrigger()
+{
+  Serial.print(__FUNCTION__);
+  Serial.println(now());
+  for(int count = 0 ; count < MAX_SENSOR ; ++count)
+  {
+    sensorList[count].hoursMeasure = sensorList[count].latestMeasure;
+  }
+}
+
 void timerSetupAll()
 {
   timerList[0].timerFunction=readAllSensorsTrigger;
@@ -164,6 +359,419 @@ const char* const descriptions[] PROGMEM = {
   description_C5,
   description_C6,
 };
+
+int navMenu(){
+  char customKey = customKeypad.getKey();
+  if(customKey){
+    Serial.println(customKey);
+    if (customKey == 'D')
+    {
+      return MW_BTE;
+    }
+    if (customKey == 'C')
+    {
+      return MW_BTC;
+    }
+    if (customKey == 'B')
+    {
+      return MW_BTD;
+    }
+    if (customKey == 'A')
+    {
+      return MW_BTU;
+    }
+    if (customKey == '*')
+    {
+      return MW_BTL;
+    }
+    if (customKey == '#')
+    {
+      return MW_BTR;
+    }
+  }
+  return MW_BTNULL;
+}
+
+
+void useAsInflowSensor(int sensorNumber){
+  Serial.println(__FUNCTION__);
+  for(int count = 0 ; count < MAX_SENSOR ; ++count)
+  {
+    sensorList[count].isInflowSensor = false;
+  }
+  sensorList[sensorNumber].isInflowSensor = true;
+}
+
+void calibrateAll(int sensorNumber){
+  Serial.println(__FUNCTION__);
+  for(int count = 0 ; count < MAX_SENSOR ; ++count)
+  {
+    sensorList[count].temperatureCalibration = ((float)(sensorList[sensorNumber].latestMeasure.temperature - sensorList[count].latestMeasure.temperature))/10;
+    sensorList[count].humidityCalibration = ((float)(sensorList[sensorNumber].latestMeasure.humidity - sensorList[count].latestMeasure.humidity))/10;
+  }
+}
+
+String measureToString(struct _measure measure, String padding)
+{
+  String string = hourMinuteSecondToString(measure.sampleTime);
+  string += padding;
+  string += measure.humidity;
+  string += " ";
+  string += measure.temperature;
+  return string;
+}
+
+void showSensorDefault(int count)
+{
+  lcd.clear();
+  String string = "";
+  // LCD line 1
+  strcpy(tree.sbuf,"Sensor "); 
+  strcat(tree.sbuf, sensorList[count].description); 
+  strcat(tree.sbuf, "  RH Temp");
+  // LCD line 2
+  strcat(tree.sbuf,"\nNow  ");
+  string = measureToString(sensorList[count].latestMeasure, "  ");
+  strcat(tree.sbuf, string.c_str());
+  // LCD line 3
+  strcat(tree.sbuf,"\nHeat ");
+  string = measureToString(sensorList[count].heatingStartedMeasure, "  ");   
+  strcat(tree.sbuf, string.c_str());
+  // LCD line 4
+  strcat(tree.sbuf,"\nCool ");
+  string = measureToString(sensorList[count].coolingStartedMeasure, "  ");
+  strcat(tree.sbuf, string.c_str());
+
+  // Flush
+  Serial.println(tree.sbuf);
+  tree.drawUsrScreen(tree.sbuf);
+
+}
+
+void showNoSensorsResponding()
+{
+  lcd.clear();
+  strcpy(tree.sbuf,"No sensor responding\n");
+  strcat(tree.sbuf,"   Not connected?");
+  Serial.println(tree.sbuf);
+  tree.drawUsrScreen(tree.sbuf);
+}
+
+void defaultScreen(){
+  time_t currentTime=now();
+  if (currentTime > latestScreenUpdate + displayCyclingInterval)
+  {
+    latestScreenUpdate = currentTime;
+    if(currentSensorShown < MAX_SENSOR)
+    {
+      if (sensorList[currentSensorShown].sampleReturnCode != DHTLIB_OK && showOnlyRespondingSensors)
+      {
+        ++sensorsSkipped;
+      }
+      else
+      {
+        showSensorDefault(currentSensorShown);
+      }
+
+      if (currentSensorShown >= MAX_SENSOR-1)
+      {
+        currentSensorShown = 0;
+        if (sensorsSkipped >= MAX_SENSOR)
+        {
+          showNoSensorsResponding();
+        }
+        sensorsSkipped = 0;
+      }
+      else
+      {
+        ++currentSensorShown;
+      }
+      Serial.println(currentSensorShown);
+    }
+    else
+    {
+      currentSensorShown = 0;
+      sensorsSkipped = 0;
+    }
+  }
+}
+
+void statusScreen(int unused)
+{
+  static  char buf[7];
+  strcpy(tree.sbuf,"User screen"); //1st lcd line
+  strcat(tree.sbuf,"\nUptime (s): ");
+  strcat(tree.sbuf,utoa((unsigned int)(millis()/1000),buf,10));//2nd lcd line
+  strcat(tree.sbuf,"\nFree mem  : ");
+  strcat(tree.sbuf,utoa((unsigned int)tree.freeRam(),buf,10));//3rd lcd line
+  strcat(tree.sbuf,"\n"); //4th lcd line (empty)
+  tree.drawUsrScreen(tree.sbuf);
+  Alarm.delay(tree.tm_usrScreen * 1000);
+}
+
+void showYearMonthDay()
+{
+  String yearMonthDay = "";
+  yearMonthDay += "YYMMDD: ";
+  yearMonthDay += yearMonthDayToString(now());
+  yearMonthDay.getBytes((unsigned char*)tree.sbuf, yearMonthDay.length()+1);
+  Serial.println(tree.sbuf);
+  tree.drawUsrScreen(tree.sbuf);
+}
+
+int * readDigits(){
+  Serial.println(__FUNCTION__);
+  const unsigned int DIGITS=6;
+  int count=0;
+  int number = -1;
+  static int digit[DIGITS];
+  time_t startTime = now();
+  lcd.print("Set value: ");
+  Serial.print("Set value: ");
+  while(count<DIGITS)
+  {
+    char key = customKeypad.getKey();
+    if (key != NO_KEY)
+    {
+      lcd.print(key);
+      Serial.print(key);
+      number = key - '0';
+      digit[count]=number;
+      Serial.print(number);
+      ++count;
+      startTime = now(); // Prolong timeout for next digit
+    }
+    if (now() > startTime + 10)
+    {
+      digit[0]=-1; // Timeout before all digits were set
+      lcd.print("FAIL");
+      break;
+    }
+  }
+  Alarm.delay(tree.tm_usrScreen * 1000);
+  return digit;
+}
+
+void setYearMonthDay(int unused)
+{
+  lcd.clear();
+  showYearMonthDay();
+  int* yearMonthDay;
+  yearMonthDay=readDigits();
+  if (yearMonthDay[0] != -1)
+  {
+    int YY=10*yearMonthDay[0] + yearMonthDay[1];
+    int MM=10*yearMonthDay[2] + yearMonthDay[3];
+    int DD=10*yearMonthDay[4] + yearMonthDay[5];
+    int hh=hour();
+    int mm=minute();
+    int ss=second();
+    timerCancelAll();
+    setTime(hh,mm,ss,DD,MM,YY);
+    timerSetupAll();
+  }
+  Serial.println(now());
+  lcd.print(now());
+}
+
+void showHourMinuteSecond()
+{
+  String stringHourMinuteSecond = "";
+  stringHourMinuteSecond += "HHMMSS: ";
+  stringHourMinuteSecond += hourMinuteSecondToString(now());
+  stringHourMinuteSecond.getBytes((unsigned char*)tree.sbuf, stringHourMinuteSecond.length()+1);
+  Serial.println(tree.sbuf);
+  tree.drawUsrScreen(tree.sbuf);
+}
+
+void setHourMinuteSecond(int unused)
+{
+  lcd.clear();
+  showHourMinuteSecond();
+  int* hourMinuteSecond;
+  hourMinuteSecond=readDigits();
+  if (hourMinuteSecond[0] != -1)
+  {
+    int hh=10*hourMinuteSecond[0] + hourMinuteSecond[1];
+    int mm=10*hourMinuteSecond[2] + hourMinuteSecond[3];
+    int ss=10*hourMinuteSecond[4] + hourMinuteSecond[5];
+    int YY=year();
+    int MM=month();
+    int DD=day();
+    timerCancelAll();
+    setTime(hh,mm,ss,DD,MM,YY);
+    timerSetupAll();
+  }
+
+  Serial.println(now());
+  lcd.print(now());
+}
+
+
+void showTime(int unused)
+{
+  String time="Time: ";
+  time += yearMonthDayToString(now());
+  time += "-";
+  time += hourMinuteSecondToString(now());
+  Serial.println(time);
+  lcd.clear();
+  lcd.print(time);
+  Alarm.delay(tree.tm_usrScreen * 1000);
+}
+
+static float saturationVaporContent(float temperature)
+{
+  static const float k[] = {4.7815706, 0.34597292, 0.0099365776, 0.00015612096, 1.9830825E-6, 1.5773396E-8};
+  float result = 0.;
+  for (int i=0; i<6; ++i)
+  {
+    result += k[i]*pow(temperature, i);
+  }
+  return result;
+}
+
+static int humidityRelativeToAbsolute(int temperature, int relativeHumidity)
+{
+  return saturationVaporContent(((float)temperature)/10) * relativeHumidity;
+}
+
+void showSensorRecent(int count)
+{
+  static char buf[12];
+  lcd.print("Sensor data: ");
+  ++sensorList[count].numberOfReads;
+  if (sensorList[count].numberOfReads >= 1000)
+  {
+    sensorList[count].numberOfReads = 0;
+  }
+  // LCD line 1
+  strcpy(tree.sbuf,"Sensor "); 
+  strcat(tree.sbuf, sensorList[count].description); 
+  strcat(tree.sbuf, "AH   Temp");//1st lcd line
+  // LCD line 2
+  strcat(tree.sbuf,"\nLatest  : ");
+  strcat(tree.sbuf,itoa((unsigned int)sensorList[count].latestMeasure.humidity/10,buf,10));
+  strcat(tree.sbuf,".");
+  strcat(tree.sbuf,itoa(abs((int)sensorList[count].latestMeasure.humidity) % 10,buf,10));
+  strcat(tree.sbuf," ");
+  strcat(tree.sbuf,itoa((int)sensorList[count].latestMeasure.temperature/10,buf,10));
+  strcat(tree.sbuf,".");
+  strcat(tree.sbuf,itoa(abs((int)sensorList[count].latestMeasure.temperature) % 10,buf,10));
+  // LCD line 3
+  strcat(tree.sbuf,"\nPrevious: ");
+  strcat(tree.sbuf,itoa((unsigned int)sensorList[count].previousMeasure.humidity/10,buf,10));
+  strcat(tree.sbuf,".");
+  strcat(tree.sbuf,itoa(abs((int)sensorList[count].previousMeasure.humidity) % 10,buf,10));
+  strcat(tree.sbuf," ");
+  strcat(tree.sbuf,itoa((int)sensorList[count].previousMeasure.temperature/10,buf,10));
+  strcat(tree.sbuf,".");
+  strcat(tree.sbuf,itoa(abs((int)sensorList[count].previousMeasure.temperature) % 10,buf,10));
+  // LCD line 4
+  if (sensorList[count].sampleReturnCode != DHTLIB_OK)
+  {
+    strcat(tree.sbuf,"\n-= NO CONNECTION! =-");
+  }
+  else if (sensorList[count].isInflowSensor)
+  {
+    strcat(tree.sbuf, "\nDrying mode: ");
+    strcat(tree.sbuf, dryingMode.c_str());
+  }
+  else
+  {
+    if (sensorList[count].latestMeasure.humidity < humidityMax*10 &&
+      sensorList[count].latestMeasure.humidity > humidityMin*10 &&
+      sensorList[count].latestMeasure.temperature < temperatureMax*10 &&
+      sensorList[count].latestMeasure.temperature > temperatureMin*10)
+    {
+      strcat(tree.sbuf,"\n");
+      strcat(tree.sbuf,"P: ");
+      strcat(tree.sbuf,itoa(sensorList[count].digitalPin,buf,10));
+      strcat(tree.sbuf," ");
+      strcat(tree.sbuf,"W: ");
+      strcat(tree.sbuf,itoa((unsigned int)sensorList[count].numberOfWrites,buf,10));
+      strcat(tree.sbuf," ");
+      strcat(tree.sbuf,"R: ");
+      strcat(tree.sbuf,itoa((unsigned int)sensorList[count].numberOfReads,buf,10));
+    }
+    else // ALARM
+    {
+      strcat(tree.sbuf,"\n -= ALARM ! =-");
+    }
+  }
+  Serial.println(tree.sbuf);
+  tree.drawUsrScreen(tree.sbuf);
+
+}
+
+void showSensorHistory(int count)
+{
+  lcd.clear();
+  String string = "";
+  // LCD line 1
+  strcpy(tree.sbuf,"Now  ");
+  string = measureToString(sensorList[count].latestMeasure, "  ");
+  strcat(tree.sbuf, string.c_str());
+  // LCD line 2
+  strcat(tree.sbuf,"\nPrev ");
+  string = measureToString(sensorList[count].previousMeasure, "  ");
+  strcat(tree.sbuf, string.c_str());
+  // LCD line 3
+  strcat(tree.sbuf,"\nHour ");
+  string = measureToString(sensorList[count].hoursMeasure, "  ");
+  strcat(tree.sbuf, string.c_str());
+  // LCD line 4
+  strcat(tree.sbuf,"\nFirst ");
+  string = yearMonthDayToString(sensorList[count].firstSampleTime);
+  string += ":";
+  string += hourMinuteSecondToString(sensorList[count].firstSampleTime);
+  strcat(tree.sbuf, string.c_str());
+  // Flush
+  Serial.println(tree.sbuf);
+  tree.drawUsrScreen(tree.sbuf);
+
+}
+
+void showSensor(int count)
+{
+  lcd.clear();
+  showSensorRecent(count);
+  Alarm.delay(displayCyclingInterval * 1000);
+  showSensorHistory(count);
+}
+
+void showSensors(int unused)
+{
+  int count=0;
+  while (count < MAX_SENSOR)
+  {
+    showSensor(count);
+    Alarm.delay(displayCyclingInterval * 1000);
+    ++count;
+  }
+}
+
+
+
+void setLogMarker(int unused)
+{
+  Serial.println(__FUNCTION__);
+  logMarker = true;
+  lcd.print("Log marker set");
+  Alarm.delay(tree.tm_usrScreen * 1000);
+}
+
+void clearHistory(int unused)
+{
+  Serial.print(__FUNCTION__);
+  for(int count = 0 ; count < MAX_SENSOR ; ++count)
+  {
+    sensorList[count].previousMeasure.humidity=0 ;
+    sensorList[count].previousMeasure.temperature=0 ;
+    sensorList[count].hoursMeasure.humidity = 0;
+    sensorList[count].hoursMeasure.temperature = 0;
+  }
+}
 
 void setup(){
   _menu *r,*s1,*s2,*s3;
@@ -308,610 +916,3 @@ void loop(){
   tree.draw();
   Alarm.delay(0);
 }
-
-int navMenu(){
-  char customKey = customKeypad.getKey();
-  if(customKey){
-    Serial.println(customKey);
-    if (customKey == 'D')
-    {
-      return MW_BTE;
-    }
-    if (customKey == 'C')
-    {
-      return MW_BTC;
-    }
-    if (customKey == 'B')
-    {
-      return MW_BTD;
-    }
-    if (customKey == 'A')
-    {
-      return MW_BTU;
-    }
-    if (customKey == '*')
-    {
-      return MW_BTL;
-    }
-    if (customKey == '#')
-    {
-      return MW_BTR;
-    }
-  }
-  else
-  {
-    return MW_BTNULL;
-  }
-}
-
-void useAsInflowSensor(int sensorNumber){
-  Serial.println(__FUNCTION__);
-  for(int count = 0 ; count < MAX_SENSOR ; ++count)
-  {
-    sensorList[count].isInflowSensor = false;
-  }
-  sensorList[sensorNumber].isInflowSensor = true;
-}
-
-void calibrateAll(int sensorNumber){
-  Serial.println(__FUNCTION__);
-  for(int count = 0 ; count < MAX_SENSOR ; ++count)
-  {
-    sensorList[count].temperatureCalibration = ((float)(sensorList[sensorNumber].latestMeasure.temperature - sensorList[count].latestMeasure.temperature))/10;
-    sensorList[count].humidityCalibration = ((float)(sensorList[sensorNumber].latestMeasure.humidity - sensorList[count].latestMeasure.humidity))/10;
-  }
-}
-
-void defaultScreen(){
-  time_t currentTime=now();
-  if (currentTime > latestScreenUpdate + displayCyclingInterval)
-  {
-    latestScreenUpdate = currentTime;
-    if(currentSensorShown < MAX_SENSOR)
-    {
-      if (sensorList[currentSensorShown].sampleReturnCode != DHTLIB_OK && showOnlyRespondingSensors)
-      {
-        ++sensorsSkipped;
-      }
-      else
-      {
-        showSensorDefault(currentSensorShown);
-      }
-
-      if (currentSensorShown >= MAX_SENSOR-1)
-      {
-        currentSensorShown = 0;
-        if (sensorsSkipped >= MAX_SENSOR)
-        {
-          showNoSensorsResponding();
-        }
-        sensorsSkipped = 0;
-      }
-      else
-      {
-        ++currentSensorShown;
-      }
-      Serial.println(currentSensorShown);
-    }
-    else
-    {
-      currentSensorShown = 0;
-      sensorsSkipped = 0;
-    }
-  }
-}
-
-void statusScreen(int unused)
-{
-  static  char buf[7];
-  strcpy(tree.sbuf,"User screen"); //1st lcd line
-  strcat(tree.sbuf,"\nUptime (s): ");
-  strcat(tree.sbuf,utoa((unsigned int)(millis()/1000),buf,10));//2nd lcd line
-  strcat(tree.sbuf,"\nFree mem  : ");
-  strcat(tree.sbuf,utoa((unsigned int)tree.freeRam(),buf,10));//3rd lcd line
-  strcat(tree.sbuf,"\n"); //4th lcd line (empty)
-  tree.drawUsrScreen(tree.sbuf);
-  Alarm.delay(tree.tm_usrScreen * 1000);
-}
-
-void setYearMonthDay(int unused)
-{
-  lcd.clear();
-  showYearMonthDay();
-  int* yearMonthDay;
-  yearMonthDay=readDigits();
-  if (yearMonthDay[0] != -1)
-  {
-    int YY=10*yearMonthDay[0] + yearMonthDay[1];
-    int MM=10*yearMonthDay[2] + yearMonthDay[3];
-    int DD=10*yearMonthDay[4] + yearMonthDay[5];
-    int hh=hour();
-    int mm=minute();
-    int ss=second();
-    timerCancelAll();
-    setTime(hh,mm,ss,DD,MM,YY);
-    timerSetupAll();
-  }
-  Serial.println(now());
-  lcd.print(now());
-}
-
-void setHourMinuteSecond(int unused)
-{
-  lcd.clear();
-  showHourMinuteSecond();
-  int* hourMinuteSecond;
-  hourMinuteSecond=readDigits();
-  if (hourMinuteSecond[0] != -1)
-  {
-    int hh=10*hourMinuteSecond[0] + hourMinuteSecond[1];
-    int mm=10*hourMinuteSecond[2] + hourMinuteSecond[3];
-    int ss=10*hourMinuteSecond[4] + hourMinuteSecond[5];
-    int YY=year();
-    int MM=month();
-    int DD=day();
-    timerCancelAll();
-    setTime(hh,mm,ss,DD,MM,YY);
-    timerSetupAll();
-  }
-
-  Serial.println(now());
-  lcd.print(now());
-}
-
-String twoDigits(int number)
-{
-  String digits;
-  if (number < 10)
-  {
-    digits = "0";
-  }
-  digits += number;
-  return digits;
-}
-
-String hourMinuteSecondToString(time_t time)
-{
-  String stringHourMinuteSecond = "";
-  stringHourMinuteSecond += twoDigits(hour(time));
-  stringHourMinuteSecond += twoDigits(minute(time));
-  stringHourMinuteSecond += twoDigits(second(time));
-  return stringHourMinuteSecond;
-}
-
-void showHourMinuteSecond()
-{
-  String stringHourMinuteSecond = "";
-  stringHourMinuteSecond += "HHMMSS: ";
-  stringHourMinuteSecond += hourMinuteSecondToString(now());
-  stringHourMinuteSecond.getBytes((unsigned char*)tree.sbuf, stringHourMinuteSecond.length()+1);
-  Serial.println(tree.sbuf);
-  tree.drawUsrScreen(tree.sbuf);
-}
-
-String yearMonthDayToString(time_t time)
-{
-  String yearMonthDay = "";
-  yearMonthDay += year(time)-2000;
-  yearMonthDay += twoDigits(month(time));
-  yearMonthDay += twoDigits(day(time));
-  return yearMonthDay;
-}
-
-void showYearMonthDay()
-{
-  String yearMonthDay = "";
-  yearMonthDay += "YYMMDD: ";
-  yearMonthDay += yearMonthDayToString(now());
-  yearMonthDay.getBytes((unsigned char*)tree.sbuf, yearMonthDay.length()+1);
-  Serial.println(tree.sbuf);
-  tree.drawUsrScreen(tree.sbuf);
-}
-
-void showTime(int unused)
-{
-  String time="Time: ";
-  time += yearMonthDayToString(now());
-  time += "-";
-  time += hourMinuteSecondToString(now());
-  Serial.println(time);
-  lcd.clear();
-  lcd.print(time);
-  Alarm.delay(tree.tm_usrScreen * 1000);
-}
-
-int * readDigits(){
-  Serial.println(__FUNCTION__);
-  const unsigned int DIGITS=6;
-  int count=0;
-  int number = -1;
-  static int digit[DIGITS];
-  time_t startTime = now();
-  lcd.print("Set value: ");
-  Serial.print("Set value: ");
-  while(count<DIGITS)
-  {
-    char key = customKeypad.getKey();
-    if (key != NO_KEY)
-    {
-      lcd.print(key);
-      Serial.print(key);
-      number = key - '0';
-      digit[count]=number;
-      Serial.print(number);
-      ++count;
-      startTime = now(); // Prolong timeout for next digit
-    }
-    if (now() > startTime + 10)
-    {
-      digit[0]=-1; // Timeout before all digits were set
-      lcd.print("FAIL");
-      break;
-    }
-  }
-  Alarm.delay(tree.tm_usrScreen * 1000);
-  return digit;
-}
-
-static float saturationVaporContent(float temperature)
-{
-  static const float k[] = {4.7815706, 0.34597292, 0.0099365776, 0.00015612096, 1.9830825E-6, 1.5773396E-8};
-  float result = 0.;
-  for (int i=0; i<6; ++i)
-  {
-    result += k[i]*pow(temperature, i);
-  }
-  return result;
-}
-
-static int humidityRelativeToAbsolute(int temperature, int relativeHumidity)
-{
-  return saturationVaporContent(((float)temperature)/10) * relativeHumidity;
-}
-
-void showNoSensorsResponding()
-{
-  lcd.clear();
-  strcpy(tree.sbuf,"No sensor responding\n");
-  strcat(tree.sbuf,"   Not connected?");
-  Serial.println(tree.sbuf);
-  tree.drawUsrScreen(tree.sbuf);
-}
-
-void showSensorRecent(int count)
-{
-  static char buf[12];
-  lcd.print("Sensor data: ");
-  ++sensorList[count].numberOfReads;
-  if (sensorList[count].numberOfReads >= 1000)
-  {
-    sensorList[count].numberOfReads = 0;
-  }
-  // LCD line 1
-  strcpy(tree.sbuf,"Sensor "); 
-  strcat(tree.sbuf, sensorList[count].description); 
-  strcat(tree.sbuf, "AH   Temp");//1st lcd line
-  // LCD line 2
-  strcat(tree.sbuf,"\nLatest  : ");
-  strcat(tree.sbuf,itoa((unsigned int)sensorList[count].latestMeasure.humidity/10,buf,10));
-  strcat(tree.sbuf,".");
-  strcat(tree.sbuf,itoa(abs((int)sensorList[count].latestMeasure.humidity) % 10,buf,10));
-  strcat(tree.sbuf," ");
-  strcat(tree.sbuf,itoa((int)sensorList[count].latestMeasure.temperature/10,buf,10));
-  strcat(tree.sbuf,".");
-  strcat(tree.sbuf,itoa(abs((int)sensorList[count].latestMeasure.temperature) % 10,buf,10));
-  // LCD line 3
-  strcat(tree.sbuf,"\nPrevious: ");
-  strcat(tree.sbuf,itoa((unsigned int)sensorList[count].previousMeasure.humidity/10,buf,10));
-  strcat(tree.sbuf,".");
-  strcat(tree.sbuf,itoa(abs((int)sensorList[count].previousMeasure.humidity) % 10,buf,10));
-  strcat(tree.sbuf," ");
-  strcat(tree.sbuf,itoa((int)sensorList[count].previousMeasure.temperature/10,buf,10));
-  strcat(tree.sbuf,".");
-  strcat(tree.sbuf,itoa(abs((int)sensorList[count].previousMeasure.temperature) % 10,buf,10));
-  // LCD line 4
-  if (sensorList[count].sampleReturnCode != DHTLIB_OK)
-  {
-    strcat(tree.sbuf,"\n-= NO CONNECTION! =-");
-  }
-  else if (sensorList[count].isInflowSensor)
-  {
-    strcat(tree.sbuf, "\nDrying mode: ");
-    strcat(tree.sbuf, dryingMode.c_str());
-  }
-  else
-  {
-    if (sensorList[count].latestMeasure.humidity < humidityMax*10 &&
-      sensorList[count].latestMeasure.humidity > humidityMin*10 &&
-      sensorList[count].latestMeasure.temperature < temperatureMax*10 &&
-      sensorList[count].latestMeasure.temperature > temperatureMin*10)
-    {
-      strcat(tree.sbuf,"\n");
-      strcat(tree.sbuf,"P: ");
-      strcat(tree.sbuf,itoa(sensorList[count].digitalPin,buf,10));
-      strcat(tree.sbuf," ");
-      strcat(tree.sbuf,"W: ");
-      strcat(tree.sbuf,itoa((unsigned int)sensorList[count].numberOfWrites,buf,10));
-      strcat(tree.sbuf," ");
-      strcat(tree.sbuf,"R: ");
-      strcat(tree.sbuf,itoa((unsigned int)sensorList[count].numberOfReads,buf,10));
-    }
-    else // ALARM
-    {
-      strcat(tree.sbuf,"\n -= ALARM ! =-");
-    }
-  }
-  Serial.println(tree.sbuf);
-  tree.drawUsrScreen(tree.sbuf);
-
-}
-
-String measureToString(struct _measure measure, String padding)
-{
-  String string = hourMinuteSecondToString(measure.sampleTime);
-  string += padding;
-  string += measure.humidity;
-  string += " ";
-  string += measure.temperature;
-  return string;
-}
-
-void showSensorDefault(int count)
-{
-  lcd.clear();
-  String string = "";
-  // LCD line 1
-  strcpy(tree.sbuf,"Sensor "); 
-  strcat(tree.sbuf, sensorList[count].description); 
-  strcat(tree.sbuf, "  RH Temp");
-  // LCD line 2
-  strcat(tree.sbuf,"\nNow  ");
-  string = measureToString(sensorList[count].latestMeasure, "  ");
-  strcat(tree.sbuf, string.c_str());
-  // LCD line 3
-  strcat(tree.sbuf,"\nHeat ");
-  string = measureToString(sensorList[count].heatingStartedMeasure, "  ");   
-  strcat(tree.sbuf, string.c_str());
-  // LCD line 4
-  strcat(tree.sbuf,"\nCool ");
-  string = measureToString(sensorList[count].coolingStartedMeasure, "  ");
-  strcat(tree.sbuf, string.c_str());
-
-  // Flush
-  Serial.println(tree.sbuf);
-  tree.drawUsrScreen(tree.sbuf);
-
-}
-void showSensorHistory(int count)
-{
-  lcd.clear();
-  String string = "";
-  // LCD line 1
-  strcpy(tree.sbuf,"Now  ");
-  string = measureToString(sensorList[count].latestMeasure, "  ");
-  strcat(tree.sbuf, string.c_str());
-  // LCD line 2
-  strcat(tree.sbuf,"\nPrev ");
-  string = measureToString(sensorList[count].previousMeasure, "  ");
-  strcat(tree.sbuf, string.c_str());
-  // LCD line 3
-  strcat(tree.sbuf,"\nHour ");
-  string = measureToString(sensorList[count].hoursMeasure, "  ");
-  strcat(tree.sbuf, string.c_str());
-  // LCD line 4
-  strcat(tree.sbuf,"\nFirst ");
-  string = yearMonthDayToString(sensorList[count].firstSampleTime);
-  string += ":";
-  string += hourMinuteSecondToString(sensorList[count].firstSampleTime);
-  strcat(tree.sbuf, string.c_str());
-  // Flush
-  Serial.println(tree.sbuf);
-  tree.drawUsrScreen(tree.sbuf);
-
-}
-
-void showSensor(int count)
-{
-  lcd.clear();
-  showSensorRecent(count);
-  Alarm.delay(displayCyclingInterval * 1000);
-  showSensorHistory(count);
-}
-
-void showSensors(int unused)
-{
-  int count=0;
-  while (count < MAX_SENSOR)
-  {
-    showSensor(count);
-    Alarm.delay(displayCyclingInterval * 1000);
-    ++count;
-  }
-}
-
-void logAllSensors()
-{
-  Serial.println(__FUNCTION__);
-  String logEntry = "";
-  if (logMarker == true)
-  {
-    logEntry += "MARK";
-    logMarker = false;
-  }
-  else
-  {
-    logEntry += dryingMode;
-  }
-  logEntry += ";";
-
-  for(int count = 0 ; count < MAX_SENSOR ; ++count)
-  {
-    logEntry += sensorList[count].description;
-    logEntry += ";";
-    logEntry += sensorList[count].sampleReturnCode;
-    logEntry += ";";
-    logEntry += sensorList[count].latestMeasure.sampleTime;
-    logEntry += ";";
-    logEntry += yearMonthDayToString(sensorList[count].latestMeasure.sampleTime);
-    logEntry += "-";
-    logEntry += hourMinuteSecondToString(sensorList[count].latestMeasure.sampleTime);
-    logEntry += ";";
-    logEntry += sensorList[count].latestMeasure.humidity;
-    logEntry += ";";
-    logEntry += sensorList[count].latestMeasure.temperature;
-    logEntry += ";";
-  }
-  Serial.println(logEntry);
-  SDLogWrite(logEntry);
-}
-
-void readAllSensorsTrigger()
-{
-  Serial.print(__FUNCTION__);
-  Serial.println(now());
-  bool heatingStarted = false;
-  bool coolingStarted = false;
-  int humidityAbsolute = 0;
-  for(int count = 0 ; count < MAX_SENSOR ; ++count)
-  {
-    // Move to previous
-    sensorList[count].previousMeasure.sampleTime=sensorList[count].latestMeasure.sampleTime;
-    sensorList[count].previousMeasure.humidity=sensorList[count].latestMeasure.humidity;
-    sensorList[count].previousMeasure.temperature=sensorList[count].latestMeasure.temperature;
-    // Read current
-    sensorList[count].latestMeasure.sampleTime = now();
-    int returnCode = dht_sensor.read21(sensorList[count].digitalPin);
-    sensorList[count].sampleReturnCode = returnCode;
-    switch (returnCode)
-    {
-    case DHTLIB_OK:
-      humidityAbsolute = humidityRelativeToAbsolute(dht_sensor.temperature, dht_sensor.humidity);
-      sensorList[count].latestMeasure.temperature = dht_sensor.temperature + (int)(sensorList[count].temperatureCalibration*10);
-      sensorList[count].latestMeasure.humidity = humidityAbsolute+ (unsigned int)(sensorList[count].humidityCalibration*10);
-      ++sensorList[count].numberOfWrites;
-      if (sensorList[count].numberOfWrites >= 1000)
-      {
-        sensorList[count].numberOfWrites = 0;
-      }
-      if (0 == sensorList[count].firstSampleTime)
-      {
-        sensorList[count].firstSampleTime = now();
-      }
-      if (sensorList[count].isInflowSensor)
-      {
-        Serial.print("InflowSensor");
-        Serial.print(" ");
-        Serial.print(count);
-        Serial.print(" ");
-        Serial.println(dryingMode);
-        if ( dryingMode != "Heating" && sensorList[count].latestMeasure.temperature >= dryingModeHeatingTemperature*10)  
-        {
-          dryingMode = "Heating";
-          heatingStarted = true;
-          Serial.println("Heating");
-        }
-        if ( dryingMode == "Heating" && sensorList[count].latestMeasure.temperature <= dryingModeCoolingTemperature*10)  
-        {
-          dryingMode = "Cooling";
-          coolingStarted = true;
-          Serial.println("Cooling");
-        }
-      }
-    break;
-    default:
-      Serial.print("Sensor error: ,\t");
-      Serial.print(returnCode);
-      Serial.print(" "); 
-      Serial.println(count);
-      break;
-    }
-  }
-  if (heatingStarted)
-  {
-    for(int count = 0 ; count < MAX_SENSOR ; ++count)
-    {
-      sensorList[count].heatingStartedMeasure = sensorList[count].latestMeasure;
-    }
-  }
-  if (coolingStarted)
-  {
-    for(int count = 0 ; count < MAX_SENSOR ; ++count)
-    {
-      sensorList[count].coolingStartedMeasure = sensorList[count].latestMeasure;
-    }
-  }
-}
-
-void hourTrigger()
-{
-  Serial.print(__FUNCTION__);
-  Serial.println(now());
-  for(int count = 0 ; count < MAX_SENSOR ; ++count)
-  {
-    sensorList[count].hoursMeasure = sensorList[count].latestMeasure;
-  }
-}
-
-void setLogMarker(int unused)
-{
-  Serial.println(__FUNCTION__);
-  logMarker = true;
-  lcd.print("Log marker set");
-  Alarm.delay(tree.tm_usrScreen * 1000);
-}
-
-void clearHistory(int unused)
-{
-  Serial.print(__FUNCTION__);
-  for(int count = 0 ; count < MAX_SENSOR ; ++count)
-  {
-    sensorList[count].previousMeasure.humidity=0 ;
-    sensorList[count].previousMeasure.temperature=0 ;
-    sensorList[count].hoursMeasure.humidity = 0;
-    sensorList[count].hoursMeasure.temperature = 0;
-  }
-}
-
-void SDSetup()
-{
-  const int chipSelect = 10;
-  Serial.println(__FUNCTION__);
-  Serial.print("Initializing SD card...");
-  // make sure that the default chip select pin is set to
-  // output, even if you don't use it:
-  pinMode(53, OUTPUT);
-
-  // see if the card is present and can be initialized:
-  if (!SD.begin(chipSelect))
-  {
-    Serial.println("Card failed, or not present");
-    // don't do anything more:
-    return;
-  }
-  Serial.println("Card initialized.");
-}
-
-void SDLogWrite(String dataString)
-{
-  SDSetup();
-  String fileName = yearMonthDayToString(now()) + ".txt";
-  Serial.println(fileName);
-  // Open the file. note that only one file can be open at a time,
-  // so you have to close this one before opening another.
-  File dataFile = SD.open(fileName.c_str(), FILE_WRITE);
-  // If the file is available, write to it:
-  if (dataFile)
-  {
-    dataFile.println(dataString);
-    dataFile.close();
-    // print to the serial port too:
-    Serial.println(dataString);
-  }  
-  // If the file isn't open, pop up an error:
-  else
-  {
-    Serial.println("Error opening " + fileName);
-  } 
-  SD.end();
-}
-

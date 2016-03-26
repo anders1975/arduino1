@@ -23,8 +23,6 @@
 #define FILE_READ O_READ
 #define FILE_WRITE (O_READ | O_WRITE | O_CREAT)
 
-namespace SDLib {
-
 class File : public Stream {
  private:
   char _name[13]; // our name
@@ -33,6 +31,7 @@ class File : public Stream {
 public:
   File(SdFile f, const char *name);     // wraps an underlying SdFile
   File(void);      // 'empty' constructor
+  ~File(void);     // destructor
   virtual size_t write(uint8_t);
   virtual size_t write(const uint8_t *buf, size_t size);
   virtual int read();
@@ -68,30 +67,25 @@ public:
   // This needs to be called to set up the connection to the SD card
   // before other methods are used.
   boolean begin(uint8_t csPin = SD_CHIP_SELECT_PIN);
-
+  
   void end();
 
   // Open the specified file/directory with the supplied mode (e.g. read or
   // write, etc). Returns a File object for interacting with the file.
   // Note that currently only one file can be open at a time.
   File open(const char *filename, uint8_t mode = FILE_READ);
-  File open(const String &filename, uint8_t mode = FILE_READ) { return open( filename.c_str(), mode ); }
 
   // Methods to determine if the requested file path exists.
-  boolean exists(const char *filepath);
-  boolean exists(const String &filepath) { return exists(filepath.c_str()); }
+  boolean exists(char *filepath);
 
   // Create the requested directory heirarchy--if intermediate directories
   // do not exist they will be created.
-  boolean mkdir(const char *filepath);
-  boolean mkdir(const String &filepath) { return mkdir(filepath.c_str()); }
+  boolean mkdir(char *filepath);
   
   // Delete the file.
-  boolean remove(const char *filepath);
-  boolean remove(const String &filepath) { return remove(filepath.c_str()); }
+  boolean remove(char *filepath);
   
-  boolean rmdir(const char *filepath);
-  boolean rmdir(const String &filepath) { return rmdir(filepath.c_str()); }
+  boolean rmdir(char *filepath);
 
 private:
 
@@ -103,23 +97,9 @@ private:
   int fileOpenMode;
   
   friend class File;
-  friend boolean callback_openPath(SdFile&, const char *, boolean, void *); 
+  friend boolean callback_openPath(SdFile&, char *, boolean, void *); 
 };
 
 extern SDClass SD;
-
-};
-
-// We enclose File and SD classes in namespace SDLib to avoid conflicts
-// with others legacy libraries that redefines File class.
-
-// This ensure compatibility with sketches that uses only SD library
-using namespace SDLib;
-
-// This allows sketches to use SDLib::File with other libraries (in the
-// sketch you must use SDFile instead of File to disambiguate)
-typedef SDLib::File    SDFile;
-typedef SDLib::SDClass SDFileSystemClass;
-#define SDFileSystem   SDLib::SD
 
 #endif

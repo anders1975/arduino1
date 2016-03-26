@@ -32,11 +32,6 @@ uint8_t const SPI_HALF_SPEED = 1;
 /** Set SCK rate to F_CPU/8. Sd2Card::setSckRate(). */
 uint8_t const SPI_QUARTER_SPEED = 2;
 /**
- * USE_SPI_LIB: if set, use the SPI library bundled with Arduino IDE, otherwise
- * run with a standalone driver for AVR.
- */
-#define USE_SPI_LIB
-/**
  * Define MEGA_SOFT_SPI non-zero to use software SPI on Mega Arduinos.
  * Pins used are SS 10, MOSI 11, MISO 12, and SCK 13.
  *
@@ -44,7 +39,7 @@ uint8_t const SPI_QUARTER_SPEED = 2;
  * on Mega Arduinos.  Software SPI works well with GPS Shield V1.1
  * but many SD cards will fail with GPS Shield V1.0.
  */
-#define MEGA_SOFT_SPI 0
+#define MEGA_SOFT_SPI 1
 //------------------------------------------------------------------------------
 #if MEGA_SOFT_SPI && (defined(__AVR_ATmega1280__)||defined(__AVR_ATmega2560__))
 #define SOFTWARE_SPI
@@ -54,10 +49,6 @@ uint8_t const SPI_QUARTER_SPEED = 2;
 //
 #ifndef SOFTWARE_SPI
 // hardware pin defs
-
-// include pins_arduino.h or variant.h depending on architecture, via Arduino.h
-#include <Arduino.h>
-
 /**
  * SD Chip Select pin
  *
@@ -66,21 +57,16 @@ uint8_t const SPI_QUARTER_SPEED = 2;
  * master unless SS is set to output mode.
  */
 /** The default chip select pin for the SD card is SS. */
-uint8_t const  SD_CHIP_SELECT_PIN = SS;
-
-// The following three pins must not be redefined for hardware SPI,
-// so ensure that they are taken from pins_arduino.h or variant.h, depending on architecture.
+uint8_t const  SD_CHIP_SELECT_PIN = SS_PIN;
+// The following three pins must not be redefined for hardware SPI.
 /** SPI Master Out Slave In pin */
-uint8_t const  SPI_MOSI_PIN = MOSI;
+uint8_t const  SPI_MOSI_PIN = MOSI_PIN;
 /** SPI Master In Slave Out pin */
-uint8_t const  SPI_MISO_PIN = MISO;
+uint8_t const  SPI_MISO_PIN = MISO_PIN;
 /** SPI Clock pin */
-uint8_t const  SPI_SCK_PIN = SCK;
-
+uint8_t const  SPI_SCK_PIN = SCK_PIN;
 /** optimize loops for hardware SPI */
-#ifndef USE_SPI_LIB
 #define OPTIMIZE_HARDWARE_SPI
-#endif
 
 #else  // SOFTWARE_SPI
 // define software SPI pins so Mega can use unmodified GPS Shield

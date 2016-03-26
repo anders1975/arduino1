@@ -52,13 +52,11 @@
 
 #include "SD.h"
 
-namespace SDLib {
-
 // Used by `getNextPathComponent`
 #define MAX_COMPONENT_LEN 12 // What is max length?
 #define PATH_COMPONENT_BUFFER_LEN MAX_COMPONENT_LEN+1
 
-bool getNextPathComponent(const char *path, unsigned int *p_offset,
+bool getNextPathComponent(char *path, unsigned int *p_offset,
 			  char *buffer) {
   /*
 
@@ -117,9 +115,9 @@ bool getNextPathComponent(const char *path, unsigned int *p_offset,
 
 
 
-boolean walkPath(const char *filepath, SdFile& parentDir,
+boolean walkPath(char *filepath, SdFile& parentDir,
 		 boolean (*callback)(SdFile& parentDir,
-				     const char *filePathComponent,
+				     char *filePathComponent,
 				     boolean isLastComponent,
 				     void *object),
 		 void *object = NULL) {
@@ -232,7 +230,7 @@ boolean walkPath(const char *filepath, SdFile& parentDir,
 
  */
 
-boolean callback_pathExists(SdFile& parentDir, const char *filePathComponent, 
+boolean callback_pathExists(SdFile& parentDir, char *filePathComponent, 
 			    boolean isLastComponent, void *object) {
   /*
 
@@ -255,7 +253,7 @@ boolean callback_pathExists(SdFile& parentDir, const char *filePathComponent,
 
 
 
-boolean callback_makeDirPath(SdFile& parentDir, const char *filePathComponent, 
+boolean callback_makeDirPath(SdFile& parentDir, char *filePathComponent, 
 			     boolean isLastComponent, void *object) {
   /*
 
@@ -310,7 +308,7 @@ boolean callback_openPath(SdFile& parentDir, char *filePathComponent,
 
 
 
-boolean callback_remove(SdFile& parentDir, const char *filePathComponent, 
+boolean callback_remove(SdFile& parentDir, char *filePathComponent, 
 			boolean isLastComponent, void *object) {
   if (isLastComponent) {
     return SdFile::remove(parentDir, filePathComponent);
@@ -318,7 +316,7 @@ boolean callback_remove(SdFile& parentDir, const char *filePathComponent,
   return true;
 }
 
-boolean callback_rmdir(SdFile& parentDir, const char *filePathComponent, 
+boolean callback_rmdir(SdFile& parentDir, char *filePathComponent, 
 			boolean isLastComponent, void *object) {
   if (isLastComponent) {
     SdFile f;
@@ -456,7 +454,7 @@ File SDClass::open(const char *filepath, uint8_t mode) {
 
   // there is a special case for the Root directory since its a static dir
   if (parentdir.isRoot()) {
-    if ( ! file.open(root, filepath, mode)) {
+    if ( ! file.open(SD.root, filepath, mode)) {
       // failed to open the file :(
       return File();
     }
@@ -521,7 +519,7 @@ File SDClass::open(char *filepath, uint8_t mode) {
 //}
 
 
-boolean SDClass::exists(const char *filepath) {
+boolean SDClass::exists(char *filepath) {
   /*
 
      Returns true if the supplied file path exists.
@@ -542,7 +540,7 @@ boolean SDClass::exists(const char *filepath) {
 //}
 
 
-boolean SDClass::mkdir(const char *filepath) {
+boolean SDClass::mkdir(char *filepath) {
   /*
   
     Makes a single directory or a heirarchy of directories.
@@ -553,18 +551,18 @@ boolean SDClass::mkdir(const char *filepath) {
   return walkPath(filepath, root, callback_makeDirPath);
 }
 
-boolean SDClass::rmdir(const char *filepath) {
+boolean SDClass::rmdir(char *filepath) {
   /*
   
-    Remove a single directory or a heirarchy of directories.
+    Makes a single directory or a heirarchy of directories.
 
-    A rough equivalent to `rm -rf`.
+    A rough equivalent to `mkdir -p`.
   
    */
   return walkPath(filepath, root, callback_rmdir);
 }
 
-boolean SDClass::remove(const char *filepath) {
+boolean SDClass::remove(char *filepath) {
   return walkPath(filepath, root, callback_remove);
 }
 
@@ -620,5 +618,3 @@ void File::rewindDirectory(void) {
 }
 
 SDClass SD;
-
-};

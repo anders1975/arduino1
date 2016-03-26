@@ -428,7 +428,7 @@ void showSensorDefault(int count)
   // LCD line 1
   strcpy(tree.sbuf,"Sensor "); 
   strcat(tree.sbuf, sensorList[count].description); 
-  strcat(tree.sbuf, "  RH Temp");
+  strcat(tree.sbuf, "  AH Temp");
   // LCD line 2
   strcat(tree.sbuf,"\nNow  ");
   string = measureToString(sensorList[count].latestMeasure, "  ");

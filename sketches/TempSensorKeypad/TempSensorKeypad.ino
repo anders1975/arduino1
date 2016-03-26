@@ -11,6 +11,9 @@
 #include <SD.h>
 #include <avr/pgmspace.h>
 
+static float saturationVaporContent(float temperature) __attribute__((__optimize__("O2")));
+static int humidityRelativeToAbsolute(int temperature, int relativeHumidity) __attribute__((__optimize__("O2")));
+
 // Setup DHT21 sensor framework
 dht_decade dht_sensor;
 const byte ROWS = 4; //four rows
@@ -550,6 +553,22 @@ int * readDigits(){
   return digit;
 }
 
+static float saturationVaporContent(float temperature)
+{
+  static const float k[] = {4.7815706, 0.34597292, 0.0099365776, 0.00015612096, 1.9830825E-6, 1.5773396E-8};
+  float result = 0.;
+  for (int i=0; i<6; ++i)
+  {
+    result += k[i]*pow(temperature, i);
+  }
+  return result;
+}
+
+static int humidityRelativeToAbsolute(int temperature, int relativeHumidity)
+{
+  return saturationVaporContent(((float)temperature)/10) * relativeHumidity;
+}
+
 void showNoSensorsResponding()
 {
   lcd.clear();
@@ -571,7 +590,7 @@ void showSensorRecent(int count)
   // LCD line 1
   strcpy(tree.sbuf,"Sensor "); 
   strcat(tree.sbuf, sensorList[count].description); 
-  strcat(tree.sbuf, "RH   Temp");//1st lcd line
+  strcat(tree.sbuf, "AH   Temp");//1st lcd line
   // LCD line 2
   strcat(tree.sbuf,"\nLatest  : ");
   strcat(tree.sbuf,itoa((unsigned int)sensorList[count].latestMeasure.humidity/10,buf,10));
@@ -752,6 +771,7 @@ void readAllSensorsTrigger()
   Serial.println(now());
   bool heatingStarted = false;
   bool coolingStarted = false;
+  int humidityAbsolute = 0;
   for(int count = 0 ; count < MAX_SENSOR ; ++count)
   {
     // Move to previous
@@ -765,8 +785,9 @@ void readAllSensorsTrigger()
     switch (returnCode)
     {
     case DHTLIB_OK:
+      humidityAbsolute = humidityRelativeToAbsolute(dht_sensor.temperature, dht_sensor.humidity);
       sensorList[count].latestMeasure.temperature = dht_sensor.temperature + (int)(sensorList[count].temperatureCalibration*10);
-      sensorList[count].latestMeasure.humidity = dht_sensor.humidity+ (unsigned int)(sensorList[count].humidityCalibration*10);
+      sensorList[count].latestMeasure.humidity = humidityAbsolute+ (unsigned int)(sensorList[count].humidityCalibration*10);
       ++sensorList[count].numberOfWrites;
       if (sensorList[count].numberOfWrites >= 1000)
       {

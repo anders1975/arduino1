@@ -35,8 +35,8 @@ typedef struct _measure
 {
   time_t sampleTime;
   int temperature;
-  unsigned int humidityRelative;
-  unsigned int humidityAbsolute;
+  int humidityRelative;
+  int humidityAbsolute;
 }
 _measure;
 
@@ -86,7 +86,7 @@ int temperatureMin = 1;
 boolean showOnlyRespondingSensors = true;
 int displayCyclingInterval = 3;
 boolean logMarker = false;
-String dryingMode = "Started";
+String dryingMode = "Vet ej";
 int dryingModeHeatingTemperature = 28;
 int dryingModeCoolingTemperature = 27;
 
@@ -131,17 +131,17 @@ void readAllSensorsTrigger()
         Serial.print(count);
         Serial.print(" ");
         Serial.println(dryingMode);
-        if ( dryingMode != "Heating" && sensorList[count].latestMeasure.temperature >= dryingModeHeatingTemperature*10)  
+        if ( dryingMode != "Varmer" && sensorList[count].latestMeasure.temperature >= dryingModeHeatingTemperature*10)  
         {
-          dryingMode = "Heating";
+          dryingMode = "Varmer";
           heatingStarted = true;
-          Serial.println("Heating");
+          Serial.println("Varmer");
         }
-        if ( dryingMode == "Heating" && sensorList[count].latestMeasure.temperature <= dryingModeCoolingTemperature*10)  
+        if ( dryingMode == "Varmer" && sensorList[count].latestMeasure.temperature <= dryingModeCoolingTemperature*10)  
         {
-          dryingMode = "Cooling";
+          dryingMode = "Kyler";
           coolingStarted = true;
-          Serial.println("Cooling");
+          Serial.println("Kyler");
         }
       }
     break;
@@ -183,7 +183,7 @@ String twoDigits(int number)
 String yearMonthDayToString(time_t time)
 {
   String yearMonthDay = "";
-  yearMonthDay += year(time)-2000;
+  yearMonthDay += abs(year(time)-2000);
   yearMonthDay += twoDigits(month(time));
   yearMonthDay += twoDigits(day(time));
   return yearMonthDay;
@@ -305,7 +305,7 @@ void timerSetupAll()
   timerList[1].timerInterval=sdLogInterval;
   timerList[2].timerFunction=hourTrigger;
   timerList[2].timerInterval=60*60;
-  for(unsigned int count ; count < MAX_TIMER ; count++)
+  for(unsigned int count = 0 ; count < MAX_TIMER ; count++)
   {
     timerList[count].alarmID=Alarm.timerRepeat(timerList[count].timerInterval, timerList[count].timerFunction);
   }
@@ -313,7 +313,7 @@ void timerSetupAll()
 
 void timerCancelAll()
 {
-  for(unsigned int count ; count < MAX_TIMER ; count++)
+  for(unsigned int count = 0 ; count < MAX_TIMER ; count++)
   {
     Alarm.free(timerList[count].alarmID);
   }
@@ -443,19 +443,19 @@ void showSensorDefault(int count)
   lcd.clear();
   String string = "";
   // LCD line 1
-  strcpy(tree.sbuf,"Sensor "); 
-  strcat(tree.sbuf, sensorList[count].description); 
-  strcat(tree.sbuf, " Temp RH AH");
+//  strcpy(tree.sbuf,"Sensor "); strcat...
+  strcpy(tree.sbuf, sensorList[count].description); 
+  strcat(tree.sbuf, "  Tid  Temp RH  AH");
   // LCD line 2
-  strcat(tree.sbuf,"\nNow ");
+  strcat(tree.sbuf,"\nNu  ");
   string = measureToString(sensorList[count].latestMeasure, " ");
   strcat(tree.sbuf, string.c_str());
   // LCD line 3
-  strcat(tree.sbuf,"\nHeat");
+  strcat(tree.sbuf,"\nVarm");
   string = measureToString(sensorList[count].heatingStartedMeasure, " ");
   strcat(tree.sbuf, string.c_str());
   // LCD line 4
-  strcat(tree.sbuf,"\nCool");
+  strcat(tree.sbuf,"\nKyl ");
   string = measureToString(sensorList[count].coolingStartedMeasure, " ");
   strcat(tree.sbuf, string.c_str());
 
@@ -516,10 +516,10 @@ void defaultScreen(){
 void statusScreen(int unused)
 {
   static  char buf[7];
-  strcpy(tree.sbuf,"User screen"); //1st lcd line
-  strcat(tree.sbuf,"\nUptime (s): ");
+  strcpy(tree.sbuf,"Status"); //1st lcd line
+  strcat(tree.sbuf,"\nUpptid (s): ");
   strcat(tree.sbuf,utoa((unsigned int)(millis()/1000),buf,10));//2nd lcd line
-  strcat(tree.sbuf,"\nFree mem  : ");
+  strcat(tree.sbuf,"\nFritt minne: ");
   strcat(tree.sbuf,utoa((unsigned int)tree.freeRam(),buf,10));//3rd lcd line
   strcat(tree.sbuf,"\n"); //4th lcd line (empty)
   tree.drawUsrScreen(tree.sbuf);
@@ -529,7 +529,7 @@ void statusScreen(int unused)
 void showYearMonthDay()
 {
   String yearMonthDay = "";
-  yearMonthDay += "YYMMDD: ";
+  yearMonthDay += "AAMMDD: ";
   yearMonthDay += yearMonthDayToString(now());
   yearMonthDay.getBytes((unsigned char*)tree.sbuf, yearMonthDay.length()+1);
   Serial.println(tree.sbuf);
@@ -539,11 +539,11 @@ void showYearMonthDay()
 int * readDigits(){
   Serial.println(__FUNCTION__);
   const unsigned int DIGITS=6;
-  int count=0;
+  unsigned int count=0;
   int number = -1;
   static int digit[DIGITS];
   time_t startTime = now();
-  lcd.print("Set value: ");
+  lcd.print("Skriv siffror:");
   Serial.print("Set value: ");
   while(count<DIGITS)
   {
@@ -594,7 +594,7 @@ void setYearMonthDay(int unused)
 void showHourMinuteSecond()
 {
   String stringHourMinuteSecond = "";
-  stringHourMinuteSecond += "HHMMSS: ";
+  stringHourMinuteSecond += "TTMMSS: ";
   stringHourMinuteSecond += hourMinuteSecondToString(now());
   stringHourMinuteSecond.getBytes((unsigned char*)tree.sbuf, stringHourMinuteSecond.length()+1);
   Serial.println(tree.sbuf);
@@ -627,7 +627,7 @@ void setHourMinuteSecond(int unused)
 
 void showTime(int unused)
 {
-  String time="Time: ";
+  String time="Tid: ";
   time += yearMonthDayToString(now());
   time += "-";
   time += hourMinuteSecondToString(now());
@@ -667,7 +667,7 @@ void showSensorRecent(int count)
   strcat(tree.sbuf, sensorList[count].description); 
   strcat(tree.sbuf, " Temp RH AH");//1st lcd line
   // LCD line 2
-  strcat(tree.sbuf,"\nNow  ");
+  strcat(tree.sbuf,"\nNu   ");
   strcat(tree.sbuf,itoa((int)sensorList[count].latestMeasure.temperature/10,buf,10));
   strcat(tree.sbuf,".");
   strcat(tree.sbuf,itoa(abs((int)sensorList[count].latestMeasure.temperature) % 10,buf,10));
@@ -680,7 +680,7 @@ void showSensorRecent(int count)
   strcat(tree.sbuf,".");
   strcat(tree.sbuf,itoa(abs((int)sensorList[count].latestMeasure.humidityAbsolute) % 10,buf,10));
   // LCD line 3
-  strcat(tree.sbuf,"\nPrev ");
+  strcat(tree.sbuf,"\nNyss ");
   strcat(tree.sbuf,itoa((int)sensorList[count].previousMeasure.temperature/10,buf,10));
   strcat(tree.sbuf,".");
   strcat(tree.sbuf,itoa(abs((int)sensorList[count].previousMeasure.temperature) % 10,buf,10));
@@ -695,11 +695,11 @@ void showSensorRecent(int count)
   // LCD line 4
   if (sensorList[count].sampleReturnCode != DHTLIB_OK)
   {
-    strcat(tree.sbuf,"\n-= NO CONNECTION! =-");
+    strcat(tree.sbuf,"\n-= EJ ANSLUTEN! =-");
   }
   else if (sensorList[count].isInflowSensor)
   {
-    strcat(tree.sbuf, "\nDrying mode: ");
+    strcat(tree.sbuf, "\nTorkning: ");
     strcat(tree.sbuf, dryingMode.c_str());
   }
   else
@@ -736,19 +736,19 @@ void showSensorHistory(int count)
   lcd.clear();
   String string = "";
   // LCD line 1
-  strcpy(tree.sbuf,"Now ");
+  strcpy(tree.sbuf,"Nu  ");
   string = measureToString(sensorList[count].latestMeasure, " ");
   strcat(tree.sbuf, string.c_str());
   // LCD line 2
-  strcat(tree.sbuf,"\nPrev");
+  strcat(tree.sbuf,"\nNyss");
   string = measureToString(sensorList[count].previousMeasure, " ");
   strcat(tree.sbuf, string.c_str());
   // LCD line 3
-  strcat(tree.sbuf,"\nHour");
+  strcat(tree.sbuf,"\n1Tim");
   string = measureToString(sensorList[count].hoursMeasure, " ");
   strcat(tree.sbuf, string.c_str());
   // LCD line 4
-  strcat(tree.sbuf,"\nFirst ");
+  strcat(tree.sbuf,"\nForsta ");
   string = yearMonthDayToString(sensorList[count].firstSampleTime);
   string += ":";
   string += hourMinuteSecondToString(sensorList[count].firstSampleTime);
@@ -778,13 +778,11 @@ void showSensors(int unused)
   }
 }
 
-
-
 void setLogMarker(int unused)
 {
   Serial.println(__FUNCTION__);
   logMarker = true;
-  lcd.print("Log marker set");
+  lcd.print("SD-log-markor skrivs");
   Alarm.delay(tree.tm_usrScreen * 1000);
 }
 
@@ -855,88 +853,88 @@ void setup(){
   tree.begin(&lcd,20,4); //declare lcd object and screen size to menwiz lib
 
   tree.addUsrNav(navMenu, 6);
-  r=tree.addMenu(MW_ROOT,NULL,F("Main menu"));
-    s1=tree.addMenu(MW_VAR,r, F("Show sensors"));
+  r=tree.addMenu(MW_ROOT,NULL,F("Huvudmeny"));
+    s1=tree.addMenu(MW_VAR,r, F("Visa sensorer"));
     s1->addVar(MW_ACTION,showSensors, 0);
     s1->setBehaviour(MW_ACTION_CONFIRM, false);
 
-    s1=tree.addMenu(MW_SUBMENU,r, F("Display settings"));
-      s2=tree.addMenu(MW_VAR,s1,F("Show only responding"));
+    s1=tree.addMenu(MW_SUBMENU,r, F("Displayinstallning"));
+      s2=tree.addMenu(MW_VAR,s1,F("Visa end fungerande"));
       s2->addVar(MW_BOOLEAN,&showOnlyRespondingSensors);
-      s2=tree.addMenu(MW_VAR,s1,F("Cycling interval"));
+      s2=tree.addMenu(MW_VAR,s1,F("Cykelintervall"));
       s2->addVar(MW_AUTO_INT, &displayCyclingInterval,1, 10, 1);
-      s2=tree.addMenu(MW_VAR,s1,F("Menu timeout"));
+      s2=tree.addMenu(MW_VAR,s1,F("Menytid"));
       s2->addVar(MW_AUTO_INT, &tree.tm_usrScreen,2, 10, 1);
 
     s1=tree.addMenu(MW_SUBMENU,r, F("Timers"));
-      s2=tree.addMenu(MW_VAR,s1, F("Restart all timers"));
+      s2=tree.addMenu(MW_VAR,s1, F("Omstarta alla timer"));
       s2->addVar(MW_ACTION,timerRestartAll, 0);
       s2->setBehaviour(MW_ACTION_CONFIRM, true);
 
-      s2=tree.addMenu(MW_VAR,s1, F("Measuring interval"));
+      s2=tree.addMenu(MW_VAR,s1, F("Matningsintervall"));
       s2->addVar(MW_AUTO_INT, &measuringInterval,4, 60, 2);
-      s2=tree.addMenu(MW_VAR,s1, F("SD log interval"));
+      s2=tree.addMenu(MW_VAR,s1, F("SD-log-intervall"));
       s2->addVar(MW_AUTO_INT, &sdLogInterval,10, 600, 10);
 
-    s1=tree.addMenu(MW_SUBMENU,r, F("Limits / Alarms"));
-      s2=tree.addMenu(MW_VAR,s1, F("Heating Temperature"));
+    s1=tree.addMenu(MW_SUBMENU,r, F("Granser / Alarm"));
+      s2=tree.addMenu(MW_VAR,s1, F("Varmningstemperatur"));
       s2->addVar(MW_AUTO_INT, &dryingModeHeatingTemperature, -40, 80, 1);
-      s2=tree.addMenu(MW_VAR,s1, F("Cooling Temperature"));
+      s2=tree.addMenu(MW_VAR,s1, F("Kyltemperatur"));
       s2->addVar(MW_AUTO_INT, &dryingModeCoolingTemperature, -40, 80, 1);
-      s2=tree.addMenu(MW_VAR,s1, F("Humid. Absolute Max"));
+      s2=tree.addMenu(MW_VAR,s1, F("Fukt Absolut Max"));
       s2->addVar(MW_AUTO_INT, &humidityAbsoluteMax, 0, 100, 1);
-      s2=tree.addMenu(MW_VAR,s1, F("Humid. Absolute Min"));
+      s2=tree.addMenu(MW_VAR,s1, F("Fukt Absolut Min"));
       s2->addVar(MW_AUTO_INT, &humidityAbsoluteMin, 0, 100, 1);
-      s2=tree.addMenu(MW_VAR,s1, F("Humid. Relative Max"));
+      s2=tree.addMenu(MW_VAR,s1, F("Fukt Relativ Max"));
       s2->addVar(MW_AUTO_INT, &humidityRelativeMax, 0, 100, 1);
-      s2=tree.addMenu(MW_VAR,s1, F("Humid. Relative Min"));
+      s2=tree.addMenu(MW_VAR,s1, F("Fukt Relativ Min"));
       s2->addVar(MW_AUTO_INT, &humidityRelativeMin, 0, 100, 1);
-      s2=tree.addMenu(MW_VAR,s1, F("Temperature Max"));
+      s2=tree.addMenu(MW_VAR,s1, F("Temperatur Max"));
       s2->addVar(MW_AUTO_INT, &temperatureMax, -40, 80, 1);
-      s2=tree.addMenu(MW_VAR,s1, F("Temperature Min"));
+      s2=tree.addMenu(MW_VAR,s1, F("Temperatur Min"));
       s2->addVar(MW_AUTO_INT, &temperatureMin, -40, 80, 1);
 
-    s1=tree.addMenu(MW_SUBMENU,r, F("Time"));
-      s2=tree.addMenu(MW_VAR,s1, F("Show time"));
+    s1=tree.addMenu(MW_SUBMENU,r, F("Tid / Klocka"));
+      s2=tree.addMenu(MW_VAR,s1, F("Visa tid"));
       s2->addVar(MW_ACTION,showTime, 0);
       s2->setBehaviour(MW_ACTION_CONFIRM, false);
-      s2=tree.addMenu(MW_SUBMENU,s1, F("Set time"));
-        s3=tree.addMenu(MW_VAR, s2, F("Year Month Day"));
+      s2=tree.addMenu(MW_SUBMENU,s1, F("Stall in tid"));
+        s3=tree.addMenu(MW_VAR, s2, F("Ar Manad Dag"));
         s3->addVar(MW_ACTION, setYearMonthDay, 0);
         s3->setBehaviour(MW_ACTION_CONFIRM, false);
 
-        s3=tree.addMenu(MW_VAR, s2, F("Hour Minute Second"));
+        s3=tree.addMenu(MW_VAR, s2, F("Timma Minut Sekund"));
         s3->addVar(MW_ACTION, setHourMinuteSecond, 0);
         s3->setBehaviour(MW_ACTION_CONFIRM, false);
 
-    s1=tree.addMenu(MW_VAR,r, F("Show status"));
+    s1=tree.addMenu(MW_VAR,r, F("Visa status"));
     s1->addVar(MW_ACTION,statusScreen, 0);
     s1->setBehaviour(MW_ACTION_CONFIRM, false);
 
-    s1=tree.addMenu(MW_VAR,r, F("Clear sensor history"));
+    s1=tree.addMenu(MW_VAR,r, F("Tom sensorhistorik"));
     s1->addVar(MW_ACTION,clearHistory, 0);
     s1->setBehaviour(MW_ACTION_CONFIRM, true);
 
-    s1=tree.addMenu(MW_VAR,r, F("Set log marker"));
+    s1=tree.addMenu(MW_VAR,r, F("Skriv SD-log-markor"));
     s1->addVar(MW_ACTION,setLogMarker, 0);
     s1->setBehaviour(MW_ACTION_CONFIRM, true);
 /*
-    s1=tree.addMenu(MW_SUBMENU,r, F("Sensor calibration"));
+    s1=tree.addMenu(MW_SUBMENU,r, F("Sensorkalibrering"));
     for(int count = 0 ; count < MAX_SENSOR ; ++count)
     {
       s2=tree.addMenu(MW_SUBMENU,s1, (const __FlashStringHelper*)pgm_read_word(&descriptions[count]));
-        s3=tree.addMenu(MW_VAR, s2, F("HumidityRelative offset"));
+        s3=tree.addMenu(MW_VAR, s2, F("Fukt relativ komp"));
         s3->addVar(MW_AUTO_FLOAT, &sensorList[count].humidityRelativeCalibration, -100.0, 100.0, 0.1);
-        s3=tree.addMenu(MW_VAR, s2, F("Temperature offset"));
+        s3=tree.addMenu(MW_VAR, s2, F("Temperatur komp"));
         s3->addVar(MW_AUTO_FLOAT, &sensorList[count].temperatureCalibration, -100.0, 100.0, 0.1);
-        s3=tree.addMenu(MW_VAR, s2, F("Use as reference"));
+        s3=tree.addMenu(MW_VAR, s2, F("Anvand som referens"));
         s3->addVar(MW_ACTION, calibrateAll, count);
-        s3=tree.addMenu(MW_VAR, s2, F("Use as inflow sensor"));
+        s3=tree.addMenu(MW_VAR, s2, F("Anvand som in-sensor"));
         s3->addVar(MW_ACTION, useAsInflowSensor, count);
     }
 */
   tree.getErrorMessage(true);
-  //(optional)create a user define screen callback to activate after given time since last button push 
+  //Screen callback to activate after given time since last button push 
   tree.addUsrScreen(defaultScreen,tree.tm_usrScreen);
 
   Serial.print(hour());
@@ -945,7 +943,6 @@ void setup(){
 }
 
 void loop(){
-  int errorCode;
   tree.draw();
   Alarm.delay(0);
 }

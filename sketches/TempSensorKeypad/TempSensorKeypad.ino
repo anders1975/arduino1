@@ -430,11 +430,11 @@ String measureToString(struct _measure measure, String padding)
 {
   String string = hourMinuteToString(measure.sampleTime);
   string += padding;
-  string += measure.temperature/10;
+  string += measure.temperature;
   string += " ";
-  string += measure.humidityRelative/10;
+  string += measure.humidityRelative;
   string += " ";
-  string += measure.humidityAbsolute/10;
+  string += measure.humidityAbsolute;
   return string;
 }
 
@@ -447,15 +447,15 @@ void showSensorDefault(int count)
   strcat(tree.sbuf, sensorList[count].description); 
   strcat(tree.sbuf, " Temp RH AH");
   // LCD line 2
-  strcat(tree.sbuf,"\nNow  ");
+  strcat(tree.sbuf,"\nNow ");
   string = measureToString(sensorList[count].latestMeasure, " ");
   strcat(tree.sbuf, string.c_str());
   // LCD line 3
-  strcat(tree.sbuf,"\nHeat ");
+  strcat(tree.sbuf,"\nHeat");
   string = measureToString(sensorList[count].heatingStartedMeasure, " ");
   strcat(tree.sbuf, string.c_str());
   // LCD line 4
-  strcat(tree.sbuf,"\nCool ");
+  strcat(tree.sbuf,"\nCool");
   string = measureToString(sensorList[count].coolingStartedMeasure, " ");
   strcat(tree.sbuf, string.c_str());
 
@@ -736,15 +736,15 @@ void showSensorHistory(int count)
   lcd.clear();
   String string = "";
   // LCD line 1
-  strcpy(tree.sbuf,"Now  ");
+  strcpy(tree.sbuf,"Now ");
   string = measureToString(sensorList[count].latestMeasure, " ");
   strcat(tree.sbuf, string.c_str());
   // LCD line 2
-  strcat(tree.sbuf,"\nPrev ");
+  strcat(tree.sbuf,"\nPrev");
   string = measureToString(sensorList[count].previousMeasure, " ");
   strcat(tree.sbuf, string.c_str());
   // LCD line 3
-  strcat(tree.sbuf,"\nHour ");
+  strcat(tree.sbuf,"\nHour");
   string = measureToString(sensorList[count].hoursMeasure, " ");
   strcat(tree.sbuf, string.c_str());
   // LCD line 4

@@ -12,7 +12,7 @@
 #include <avr/pgmspace.h>
 
 static float saturationVaporContent(float temperature) __attribute__((__optimize__("O2")));
-static int humidityRelativeToAbsolute(int temperature, int relativeHumidity) __attribute__((__optimize__("O2")));
+static int humidityRelativeToAbsolute(int temperature, int humidityRelative) __attribute__((__optimize__("O2")));
 
 // Setup DHT21 sensor framework
 dht_decade dht_sensor;
@@ -35,7 +35,8 @@ typedef struct _measure
 {
   time_t sampleTime;
   int temperature;
-  unsigned int humidity;
+  unsigned int humidityRelative;
+  unsigned int humidityAbsolute;
 }
 _measure;
 
@@ -51,7 +52,7 @@ typedef struct
   time_t latestSampleTime;
   int sampleReturnCode;
   float temperatureCalibration;
-  float humidityCalibration;
+  float humidityRelativeCalibration;
   int digitalPin;
   unsigned int numberOfWrites;
   unsigned int numberOfReads;
@@ -76,8 +77,10 @@ const int MAX_TIMER=3;
 _timerData timerList[MAX_TIMER];
 int measuringInterval = 10;
 int sdLogInterval = 60;
-int humidityMax = 99;
-int humidityMin = 1;
+int humidityRelativeMax = 99;
+int humidityRelativeMin = 1;
+int humidityAbsoluteMax = 99;
+int humidityAbsoluteMin = 1;
 int temperatureMax = 80;
 int temperatureMin = 1;
 boolean showOnlyRespondingSensors = true;
@@ -98,7 +101,8 @@ void readAllSensorsTrigger()
   {
     // Move to previous
     sensorList[count].previousMeasure.sampleTime=sensorList[count].latestMeasure.sampleTime;
-    sensorList[count].previousMeasure.humidity=sensorList[count].latestMeasure.humidity;
+    sensorList[count].previousMeasure.humidityRelative=sensorList[count].latestMeasure.humidityRelative;
+    sensorList[count].previousMeasure.humidityAbsolute=sensorList[count].latestMeasure.humidityAbsolute;
     sensorList[count].previousMeasure.temperature=sensorList[count].latestMeasure.temperature;
     // Read current
     sensorList[count].latestMeasure.sampleTime = now();
@@ -107,9 +111,10 @@ void readAllSensorsTrigger()
     switch (returnCode)
     {
     case DHTLIB_OK:
-      humidityAbsolute = humidityRelativeToAbsolute(dht_sensor.temperature, dht_sensor.humidity);
+      humidityAbsolute = humidityRelativeToAbsolute(dht_sensor.temperature, dht_sensor.humidity + (unsigned int)(sensorList[count].humidityRelativeCalibration*10));
       sensorList[count].latestMeasure.temperature = dht_sensor.temperature + (int)(sensorList[count].temperatureCalibration*10);
-      sensorList[count].latestMeasure.humidity = humidityAbsolute+ (unsigned int)(sensorList[count].humidityCalibration*10);
+      sensorList[count].latestMeasure.humidityAbsolute = humidityAbsolute;
+      sensorList[count].latestMeasure.humidityRelative = dht_sensor.humidity + (unsigned int)(sensorList[count].humidityRelativeCalibration*10);
       ++sensorList[count].numberOfWrites;
       if (sensorList[count].numberOfWrites >= 1000)
       {
@@ -182,6 +187,14 @@ String yearMonthDayToString(time_t time)
   yearMonthDay += twoDigits(month(time));
   yearMonthDay += twoDigits(day(time));
   return yearMonthDay;
+}
+
+String hourMinuteToString(time_t time)
+{
+  String stringHourMinute = "";
+  stringHourMinute += twoDigits(hour(time));
+  stringHourMinute += twoDigits(minute(time));
+  return stringHourMinute;
 }
 
 String hourMinuteSecondToString(time_t time)
@@ -263,9 +276,11 @@ void logAllSensors()
     logEntry += "-";
     logEntry += hourMinuteSecondToString(sensorList[count].latestMeasure.sampleTime);
     logEntry += ";";
-    logEntry += sensorList[count].latestMeasure.humidity;
-    logEntry += ";";
     logEntry += sensorList[count].latestMeasure.temperature;
+    logEntry += ";";
+    logEntry += sensorList[count].latestMeasure.humidityRelative;
+    logEntry += ";";
+    logEntry += sensorList[count].latestMeasure.humidityAbsolute;
     logEntry += ";";
   }
   Serial.println(logEntry);
@@ -320,24 +335,24 @@ time_t latestScreenUpdate;
 int currentSensorShown = 0;
 int sensorsSkipped = 0;
 
-const char description_A1[] PROGMEM = "A1  ";
-const char description_A2[] PROGMEM = "A2  ";
-const char description_A3[] PROGMEM = "A3  ";
-const char description_A4[] PROGMEM = "A4  ";
-const char description_A5[] PROGMEM = "A5  ";
-const char description_A6[] PROGMEM = "A6  ";
-const char description_B1[] PROGMEM = "B1  ";
-const char description_B2[] PROGMEM = "B2  ";
-const char description_B3[] PROGMEM = "B3  ";
-const char description_B4[] PROGMEM = "B4  ";
-const char description_B5[] PROGMEM = "B5  ";
-const char description_B6[] PROGMEM = "B6  ";
-const char description_C1[] PROGMEM = "C1  ";
-const char description_C2[] PROGMEM = "C2  ";
-const char description_C3[] PROGMEM = "C3  ";
-const char description_C4[] PROGMEM = "C4  ";
-const char description_C5[] PROGMEM = "C5  ";
-const char description_C6[] PROGMEM = "C6  ";
+const char description_A1[] PROGMEM = "A1";
+const char description_A2[] PROGMEM = "A2";
+const char description_A3[] PROGMEM = "A3";
+const char description_A4[] PROGMEM = "A4";
+const char description_A5[] PROGMEM = "A5";
+const char description_A6[] PROGMEM = "A6";
+const char description_B1[] PROGMEM = "B1";
+const char description_B2[] PROGMEM = "B2";
+const char description_B3[] PROGMEM = "B3";
+const char description_B4[] PROGMEM = "B4";
+const char description_B5[] PROGMEM = "B5";
+const char description_B6[] PROGMEM = "B6";
+const char description_C1[] PROGMEM = "C1";
+const char description_C2[] PROGMEM = "C2";
+const char description_C3[] PROGMEM = "C3";
+const char description_C4[] PROGMEM = "C4";
+const char description_C5[] PROGMEM = "C5";
+const char description_C6[] PROGMEM = "C6";
 
 const char* const descriptions[] PROGMEM = {
   description_A1,
@@ -407,17 +422,19 @@ void calibrateAll(int sensorNumber){
   for(int count = 0 ; count < MAX_SENSOR ; ++count)
   {
     sensorList[count].temperatureCalibration = ((float)(sensorList[sensorNumber].latestMeasure.temperature - sensorList[count].latestMeasure.temperature))/10;
-    sensorList[count].humidityCalibration = ((float)(sensorList[sensorNumber].latestMeasure.humidity - sensorList[count].latestMeasure.humidity))/10;
+    sensorList[count].humidityRelativeCalibration = ((float)(sensorList[sensorNumber].latestMeasure.humidityRelative - sensorList[count].latestMeasure.humidityRelative))/10;
   }
 }
 
 String measureToString(struct _measure measure, String padding)
 {
-  String string = hourMinuteSecondToString(measure.sampleTime);
+  String string = hourMinuteToString(measure.sampleTime);
   string += padding;
-  string += measure.humidity;
+  string += measure.temperature/10;
   string += " ";
-  string += measure.temperature;
+  string += measure.humidityRelative/10;
+  string += " ";
+  string += measure.humidityAbsolute/10;
   return string;
 }
 
@@ -428,18 +445,18 @@ void showSensorDefault(int count)
   // LCD line 1
   strcpy(tree.sbuf,"Sensor "); 
   strcat(tree.sbuf, sensorList[count].description); 
-  strcat(tree.sbuf, "  AH Temp");
+  strcat(tree.sbuf, " Temp RH AH");
   // LCD line 2
   strcat(tree.sbuf,"\nNow  ");
-  string = measureToString(sensorList[count].latestMeasure, "  ");
+  string = measureToString(sensorList[count].latestMeasure, " ");
   strcat(tree.sbuf, string.c_str());
   // LCD line 3
   strcat(tree.sbuf,"\nHeat ");
-  string = measureToString(sensorList[count].heatingStartedMeasure, "  ");   
+  string = measureToString(sensorList[count].heatingStartedMeasure, " ");
   strcat(tree.sbuf, string.c_str());
   // LCD line 4
   strcat(tree.sbuf,"\nCool ");
-  string = measureToString(sensorList[count].coolingStartedMeasure, "  ");
+  string = measureToString(sensorList[count].coolingStartedMeasure, " ");
   strcat(tree.sbuf, string.c_str());
 
   // Flush
@@ -631,9 +648,9 @@ static float saturationVaporContent(float temperature)
   return result;
 }
 
-static int humidityRelativeToAbsolute(int temperature, int relativeHumidity)
+static int humidityRelativeToAbsolute(int temperature, int humidityRelative)
 {
-  return saturationVaporContent(((float)temperature)/10) * relativeHumidity;
+  return saturationVaporContent(((float)temperature)/10) * humidityRelative/100;
 }
 
 void showSensorRecent(int count)
@@ -648,25 +665,33 @@ void showSensorRecent(int count)
   // LCD line 1
   strcpy(tree.sbuf,"Sensor "); 
   strcat(tree.sbuf, sensorList[count].description); 
-  strcat(tree.sbuf, "AH   Temp");//1st lcd line
+  strcat(tree.sbuf, " Temp RH AH");//1st lcd line
   // LCD line 2
-  strcat(tree.sbuf,"\nLatest  : ");
-  strcat(tree.sbuf,itoa((unsigned int)sensorList[count].latestMeasure.humidity/10,buf,10));
-  strcat(tree.sbuf,".");
-  strcat(tree.sbuf,itoa(abs((int)sensorList[count].latestMeasure.humidity) % 10,buf,10));
-  strcat(tree.sbuf," ");
+  strcat(tree.sbuf,"\nNow  ");
   strcat(tree.sbuf,itoa((int)sensorList[count].latestMeasure.temperature/10,buf,10));
   strcat(tree.sbuf,".");
   strcat(tree.sbuf,itoa(abs((int)sensorList[count].latestMeasure.temperature) % 10,buf,10));
-  // LCD line 3
-  strcat(tree.sbuf,"\nPrevious: ");
-  strcat(tree.sbuf,itoa((unsigned int)sensorList[count].previousMeasure.humidity/10,buf,10));
-  strcat(tree.sbuf,".");
-  strcat(tree.sbuf,itoa(abs((int)sensorList[count].previousMeasure.humidity) % 10,buf,10));
   strcat(tree.sbuf," ");
+  strcat(tree.sbuf,itoa((unsigned int)sensorList[count].latestMeasure.humidityRelative/10,buf,10));
+  strcat(tree.sbuf,".");
+  strcat(tree.sbuf,itoa(abs((int)sensorList[count].latestMeasure.humidityRelative) % 10,buf,10));
+  strcat(tree.sbuf," ");
+  strcat(tree.sbuf,itoa((unsigned int)sensorList[count].latestMeasure.humidityAbsolute/10,buf,10));
+  strcat(tree.sbuf,".");
+  strcat(tree.sbuf,itoa(abs((int)sensorList[count].latestMeasure.humidityAbsolute) % 10,buf,10));
+  // LCD line 3
+  strcat(tree.sbuf,"\nPrev ");
   strcat(tree.sbuf,itoa((int)sensorList[count].previousMeasure.temperature/10,buf,10));
   strcat(tree.sbuf,".");
   strcat(tree.sbuf,itoa(abs((int)sensorList[count].previousMeasure.temperature) % 10,buf,10));
+  strcat(tree.sbuf," ");
+  strcat(tree.sbuf,itoa((unsigned int)sensorList[count].previousMeasure.humidityRelative/10,buf,10));
+  strcat(tree.sbuf,".");
+  strcat(tree.sbuf,itoa(abs((int)sensorList[count].previousMeasure.humidityRelative) % 10,buf,10));
+  strcat(tree.sbuf," ");
+  strcat(tree.sbuf,itoa((unsigned int)sensorList[count].previousMeasure.humidityAbsolute/10,buf,10));
+  strcat(tree.sbuf,".");
+  strcat(tree.sbuf,itoa(abs((int)sensorList[count].previousMeasure.humidityAbsolute) % 10,buf,10));
   // LCD line 4
   if (sensorList[count].sampleReturnCode != DHTLIB_OK)
   {
@@ -679,8 +704,10 @@ void showSensorRecent(int count)
   }
   else
   {
-    if (sensorList[count].latestMeasure.humidity < humidityMax*10 &&
-      sensorList[count].latestMeasure.humidity > humidityMin*10 &&
+    if (sensorList[count].latestMeasure.humidityRelative < humidityRelativeMax*10 &&
+      sensorList[count].latestMeasure.humidityRelative > humidityRelativeMin*10 &&
+      sensorList[count].latestMeasure.humidityAbsolute < humidityAbsoluteMax*10 &&
+      sensorList[count].latestMeasure.humidityAbsolute > humidityAbsoluteMin*10 &&
       sensorList[count].latestMeasure.temperature < temperatureMax*10 &&
       sensorList[count].latestMeasure.temperature > temperatureMin*10)
     {
@@ -710,15 +737,15 @@ void showSensorHistory(int count)
   String string = "";
   // LCD line 1
   strcpy(tree.sbuf,"Now  ");
-  string = measureToString(sensorList[count].latestMeasure, "  ");
+  string = measureToString(sensorList[count].latestMeasure, " ");
   strcat(tree.sbuf, string.c_str());
   // LCD line 2
   strcat(tree.sbuf,"\nPrev ");
-  string = measureToString(sensorList[count].previousMeasure, "  ");
+  string = measureToString(sensorList[count].previousMeasure, " ");
   strcat(tree.sbuf, string.c_str());
   // LCD line 3
   strcat(tree.sbuf,"\nHour ");
-  string = measureToString(sensorList[count].hoursMeasure, "  ");
+  string = measureToString(sensorList[count].hoursMeasure, " ");
   strcat(tree.sbuf, string.c_str());
   // LCD line 4
   strcat(tree.sbuf,"\nFirst ");
@@ -766,9 +793,11 @@ void clearHistory(int unused)
   Serial.print(__FUNCTION__);
   for(int count = 0 ; count < MAX_SENSOR ; ++count)
   {
-    sensorList[count].previousMeasure.humidity=0 ;
+    sensorList[count].previousMeasure.humidityRelative=0 ;
+    sensorList[count].previousMeasure.humidityAbsolute=0 ;
     sensorList[count].previousMeasure.temperature=0 ;
-    sensorList[count].hoursMeasure.humidity = 0;
+    sensorList[count].hoursMeasure.humidityRelative = 0;
+    sensorList[count].hoursMeasure.humidityAbsolute = 0;
     sensorList[count].hoursMeasure.temperature = 0;
   }
 }
@@ -782,7 +811,7 @@ void setup(){
   // Sensor list setup
   memset(&sensorList, 0, sizeof(sensorList));
 
-  sensorList[0].isInflowSensor = true;
+  sensorList[1].isInflowSensor = true;
 
   sensorList[0].digitalPin=30;
   strcpy_P(sensorList[0].description, (char *)pgm_read_word(&descriptions[0]));
@@ -854,10 +883,14 @@ void setup(){
       s2->addVar(MW_AUTO_INT, &dryingModeHeatingTemperature, -40, 80, 1);
       s2=tree.addMenu(MW_VAR,s1, F("Cooling Temperature"));
       s2->addVar(MW_AUTO_INT, &dryingModeCoolingTemperature, -40, 80, 1);
-      s2=tree.addMenu(MW_VAR,s1, F("Humidity Max"));
-      s2->addVar(MW_AUTO_INT, &humidityMax, 0, 100, 1);
-      s2=tree.addMenu(MW_VAR,s1, F("Humidity Min"));
-      s2->addVar(MW_AUTO_INT, &humidityMin, 0, 100, 1);
+      s2=tree.addMenu(MW_VAR,s1, F("Humid. Absolute Max"));
+      s2->addVar(MW_AUTO_INT, &humidityAbsoluteMax, 0, 100, 1);
+      s2=tree.addMenu(MW_VAR,s1, F("Humid. Absolute Min"));
+      s2->addVar(MW_AUTO_INT, &humidityAbsoluteMin, 0, 100, 1);
+      s2=tree.addMenu(MW_VAR,s1, F("Humid. Relative Max"));
+      s2->addVar(MW_AUTO_INT, &humidityRelativeMax, 0, 100, 1);
+      s2=tree.addMenu(MW_VAR,s1, F("Humid. Relative Min"));
+      s2->addVar(MW_AUTO_INT, &humidityRelativeMin, 0, 100, 1);
       s2=tree.addMenu(MW_VAR,s1, F("Temperature Max"));
       s2->addVar(MW_AUTO_INT, &temperatureMax, -40, 80, 1);
       s2=tree.addMenu(MW_VAR,s1, F("Temperature Min"));
@@ -892,8 +925,8 @@ void setup(){
     for(int count = 0 ; count < MAX_SENSOR ; ++count)
     {
       s2=tree.addMenu(MW_SUBMENU,s1, (const __FlashStringHelper*)pgm_read_word(&descriptions[count]));
-        s3=tree.addMenu(MW_VAR, s2, F("Humidity offset"));
-        s3->addVar(MW_AUTO_FLOAT, &sensorList[count].humidityCalibration, -100.0, 100.0, 0.1);
+        s3=tree.addMenu(MW_VAR, s2, F("HumidityRelative offset"));
+        s3->addVar(MW_AUTO_FLOAT, &sensorList[count].humidityRelativeCalibration, -100.0, 100.0, 0.1);
         s3=tree.addMenu(MW_VAR, s2, F("Temperature offset"));
         s3->addVar(MW_AUTO_FLOAT, &sensorList[count].temperatureCalibration, -100.0, 100.0, 0.1);
         s3=tree.addMenu(MW_VAR, s2, F("Use as reference"));

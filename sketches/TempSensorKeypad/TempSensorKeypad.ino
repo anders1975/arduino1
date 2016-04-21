@@ -86,6 +86,7 @@ int temperatureMin = 1;
 boolean showOnlyRespondingSensors = true;
 int displayCyclingInterval = 3;
 boolean logMarker = false;
+String logMarkerString = "";
 String dryingMode = "Vet ej";
 int dryingModeHeatingTemperature = 28;
 int dryingModeCoolingTemperature = 27;
@@ -180,12 +181,19 @@ String twoDigits(int number)
   return digits;
 }
 
+String monthDayToString(time_t time)
+{
+  String monthDay = "";
+  monthDay += twoDigits(month(time));
+  monthDay += twoDigits(day(time));
+  return monthDay;
+}
+
 String yearMonthDayToString(time_t time)
 {
   String yearMonthDay = "";
   yearMonthDay += abs(year(time)-2000);
-  yearMonthDay += twoDigits(month(time));
-  yearMonthDay += twoDigits(day(time));
+  yearMonthDay += monthDayToString(time);
   return yearMonthDay;
 }
 
@@ -255,7 +263,7 @@ void logAllSensors()
   String logEntry = "";
   if (logMarker == true)
   {
-    logEntry += "MARK";
+    logEntry += "MARK-" + logMarkerString;
     logMarker = false;
   }
   else
@@ -272,9 +280,9 @@ void logAllSensors()
     logEntry += ";";
     logEntry += sensorList[count].latestMeasure.sampleTime;
     logEntry += ";";
-    logEntry += yearMonthDayToString(sensorList[count].latestMeasure.sampleTime);
+    logEntry += monthDayToString(sensorList[count].latestMeasure.sampleTime);
     logEntry += "-";
-    logEntry += hourMinuteSecondToString(sensorList[count].latestMeasure.sampleTime);
+    logEntry += hourMinuteToString(sensorList[count].latestMeasure.sampleTime);
     logEntry += ";";
     logEntry += sensorList[count].latestMeasure.temperature;
     logEntry += ";";
@@ -402,6 +410,15 @@ int navMenu(){
     if (customKey == '#')
     {
       return MW_BTR;
+    }
+    if (isdigit(customKey))
+    {
+      // Shortcut: Any digit shall result in a log marker
+      logMarkerString = String(customKey);
+      logMarker = true;
+      lcd.clear();
+      lcd.print("SD-log-markor kommer skrivas");
+      Alarm.delay(1 * 1000);
     }
   }
   return MW_BTNULL;
@@ -536,46 +553,56 @@ void showYearMonthDay()
   tree.drawUsrScreen(tree.sbuf);
 }
 
-int * readDigits(){
+void showTime(int unused)
+{
+  String time="Tid: ";
+  time += yearMonthDayToString(now());
+  time += "-";
+  time += hourMinuteSecondToString(now());
+  Serial.println(time);
+  lcd.clear();
+  lcd.print(time);
+  Alarm.delay(tree.tm_usrScreen * 1000);
+}
+
+bool readDigits(int * digitsArray, const unsigned int digits)
+{
   Serial.println(__FUNCTION__);
-  const unsigned int DIGITS=6;
   unsigned int count=0;
   int number = -1;
-  static int digit[DIGITS];
   time_t startTime = now();
   lcd.print("Skriv siffror:");
   Serial.print("Set value: ");
-  while(count<DIGITS)
+  while(count<digits)
   {
     char key = customKeypad.getKey();
-    if (key != NO_KEY)
+    if (key != NO_KEY && isDigit(key))
     {
       lcd.print(key);
       Serial.print(key);
       number = key - '0';
-      digit[count]=number;
+      digitsArray[count]=number;
       Serial.print(number);
       ++count;
       startTime = now(); // Prolong timeout for next digit
     }
     if (now() > startTime + 10)
     {
-      digit[0]=-1; // Timeout before all digits were set
-      lcd.print("FAIL");
-      break;
+      // Timeout before all digits were set
+      return false;
     }
   }
-  Alarm.delay(tree.tm_usrScreen * 1000);
-  return digit;
+  return true;
 }
 
 void setYearMonthDay(int unused)
 {
+  const unsigned int DIGITS=6;
   lcd.clear();
   showYearMonthDay();
-  int* yearMonthDay;
-  yearMonthDay=readDigits();
-  if (yearMonthDay[0] != -1)
+  int yearMonthDay[DIGITS];
+  bool result = readDigits(yearMonthDay, DIGITS);
+  if (true == result)
   {
     int YY=10*yearMonthDay[0] + yearMonthDay[1];
     int MM=10*yearMonthDay[2] + yearMonthDay[3];
@@ -587,8 +614,13 @@ void setYearMonthDay(int unused)
     setTime(hh,mm,ss,DD,MM,YY);
     timerSetupAll();
   }
+  else
+  {
+    lcd.print(" For sent");
+    Alarm.delay(tree.tm_usrScreen * 1000);
+  }
   Serial.println(now());
-  lcd.print(now());
+  showTime(0);
 }
 
 void showHourMinuteSecond()
@@ -603,11 +635,12 @@ void showHourMinuteSecond()
 
 void setHourMinuteSecond(int unused)
 {
+  const unsigned int DIGITS=6;
   lcd.clear();
   showHourMinuteSecond();
-  int* hourMinuteSecond;
-  hourMinuteSecond=readDigits();
-  if (hourMinuteSecond[0] != -1)
+  int hourMinuteSecond[DIGITS];
+  bool result = readDigits(hourMinuteSecond, DIGITS);
+  if (true == result)
   {
     int hh=10*hourMinuteSecond[0] + hourMinuteSecond[1];
     int mm=10*hourMinuteSecond[2] + hourMinuteSecond[3];
@@ -619,22 +652,13 @@ void setHourMinuteSecond(int unused)
     setTime(hh,mm,ss,DD,MM,YY);
     timerSetupAll();
   }
-
+  else
+  {
+    lcd.print(" For sent");
+    Alarm.delay(tree.tm_usrScreen * 1000);
+  }
   Serial.println(now());
-  lcd.print(now());
-}
-
-
-void showTime(int unused)
-{
-  String time="Tid: ";
-  time += yearMonthDayToString(now());
-  time += "-";
-  time += hourMinuteSecondToString(now());
-  Serial.println(time);
-  lcd.clear();
-  lcd.print(time);
-  Alarm.delay(tree.tm_usrScreen * 1000);
+  showTime(0);
 }
 
 static float saturationVaporContent(float temperature)
@@ -780,9 +804,22 @@ void showSensors(int unused)
 
 void setLogMarker(int unused)
 {
+  const unsigned int DIGITS=4;
   Serial.println(__FUNCTION__);
+  lcd.clear();
   logMarker = true;
-  lcd.print("SD-log-markor skrivs");
+  int digitsArray[DIGITS];
+  for (unsigned int i = 0 ; i < DIGITS ; ++i)
+  {
+    digitsArray[i] = -1;
+  }
+  logMarkerString = "";
+  readDigits(digitsArray, DIGITS);
+  for (unsigned int i = 0 ; i < DIGITS ; ++i)
+  {
+    logMarkerString += (digitsArray[i] == -1) ? "-" :  String(digitsArray[i]);
+  }
+  lcd.print("  SD-log-markor kommer skrivas");
   Alarm.delay(tree.tm_usrScreen * 1000);
 }
 
@@ -802,7 +839,7 @@ void clearHistory(int unused)
 
 void setup(){
   _menu *r,*s1,*s2,*s3;
-  tree.tm_usrScreen = 5;   //lap time before usrscreen  
+  tree.tm_usrScreen = 3;   //lap time before usrscreen
   Serial.begin(115200);    
   setSyncProviders(RTC.get, RTC.set);
   memset(&timerList, 0, sizeof(timerList));
@@ -917,7 +954,7 @@ void setup(){
 
     s1=tree.addMenu(MW_VAR,r, F("Skriv SD-log-markor"));
     s1->addVar(MW_ACTION,setLogMarker, 0);
-    s1->setBehaviour(MW_ACTION_CONFIRM, true);
+    s1->setBehaviour(MW_ACTION_CONFIRM, false);
 /*
     s1=tree.addMenu(MW_SUBMENU,r, F("Sensorkalibrering"));
     for(int count = 0 ; count < MAX_SENSOR ; ++count)

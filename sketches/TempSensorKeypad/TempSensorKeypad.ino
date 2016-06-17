@@ -87,6 +87,7 @@ boolean showOnlyRespondingSensors = true;
 int displayCyclingInterval = 3;
 boolean logMarker = false;
 String logMarkerString = "";
+String logMarkerPrefixString = "MARK-";
 String dryingMode = "Vet ej";
 int dryingModeHeatingTemperature = 28;
 int dryingModeCoolingTemperature = 27;
@@ -263,7 +264,7 @@ void logAllSensors()
   String logEntry = "";
   if (logMarker == true)
   {
-    logEntry += "MARK-" + logMarkerString;
+    logEntry += logMarkerPrefixString + logMarkerString;
     logMarker = false;
   }
   else
@@ -417,7 +418,10 @@ int navMenu(){
       logMarkerString = String(customKey);
       logMarker = true;
       lcd.clear();
-      lcd.print("SD-log-markor kommer skrivas");
+      lcd.setCursor(0,0);
+      lcd.print("SD-log-markor kommer");
+      lcd.setCursor(0,1);
+      lcd.print("skrivas: " + logMarkerPrefixString + logMarkerString);
       Alarm.delay(1 * 1000);
     }
   }
@@ -819,7 +823,10 @@ void setLogMarker(int unused)
   {
     logMarkerString += (digitsArray[i] == -1) ? "-" :  String(digitsArray[i]);
   }
-  lcd.print("  SD-log-markor kommer skrivas");
+  lcd.setCursor(0,1);
+  lcd.print("SD-log-markor kommer");
+  lcd.setCursor(0,2);
+  lcd.print("skrivas: " + logMarkerPrefixString + logMarkerString);
   Alarm.delay(tree.tm_usrScreen * 1000);
 }
 

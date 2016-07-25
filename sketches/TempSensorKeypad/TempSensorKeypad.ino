@@ -89,8 +89,9 @@ boolean logMarker = false;
 String logMarkerString = "";
 String logMarkerPrefixString = "MARK-";
 String dryingMode = "Vet ej";
-int dryingModeHeatingTemperature = 28;
-int dryingModeCoolingTemperature = 27;
+// Heating/cooling detection; hysteresis recommended
+int dryingModeHeatingTemperature = 35;
+int dryingModeCoolingTemperature = 34;
 
 void readAllSensorsTrigger()
 {
@@ -489,8 +490,8 @@ void showSensorDefault(int count)
 void showNoSensorsResponding()
 {
   lcd.clear();
-  strcpy(tree.sbuf,"No sensor responding\n");
-  strcat(tree.sbuf,"   Not connected?");
+  strcpy(tree.sbuf,"Ingen sensor svarar\n");
+  strcat(tree.sbuf,"   Ej ansluten?");
   Serial.println(tree.sbuf);
   tree.drawUsrScreen(tree.sbuf);
 }
@@ -853,7 +854,8 @@ void setup(){
   // Sensor list setup
   memset(&sensorList, 0, sizeof(sensorList));
 
-  sensorList[1].isInflowSensor = true;
+  // Heating/cooling detector
+  sensorList[0].isInflowSensor = true;
 
   sensorList[0].digitalPin=30;
   strcpy_P(sensorList[0].description, (char *)pgm_read_word(&descriptions[0]));
